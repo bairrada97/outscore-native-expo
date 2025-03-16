@@ -10,140 +10,23 @@ import {
 } from '../../pkg/types/football-api';
 import { format, isBefore, startOfDay } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
-
-const CACHE_PREFIX = 'fixtures';
-const CHUNK_SIZE = 500;
-const TODAY_UPDATE_INTERVAL = 15;  
-const FUTURE_TTL = (date: string) => {
-  const targetDate = new Date(date);
-  const now = new Date(); 
-  const ttl = Math.floor((targetDate.getTime() - now.getTime()) / 1000);
-  return Math.max(ttl, 60); // Ensure minimum 60 seconds TTL
-};
-
-const getCacheKey = (date: string, chunk?: number, live?: boolean): string => {
-  const base = `${CACHE_PREFIX}:${date}${live ? ':live' : ''}`;
-  return chunk !== undefined ? `${base}:chunk:${chunk}` : base;
-};
-
-const getMetaKey = (date: string, live?: boolean): string => {
-  return `${CACHE_PREFIX}:${date}${live ? ':live' : ''}:meta`;
-};
-
-const isToday = (date: string): boolean => {
-  const today = format(new Date(), 'yyyy-MM-dd');
-  return date === today;
-};
-
-const isFuture = (date: string): boolean => {
-  const targetDate = new Date(date);
-  const today = startOfDay(new Date());
-  return targetDate > today;
-};
-
-const isPast = (date: string): boolean => {
-  const targetDate = startOfDay(new Date(date));
-  const today = startOfDay(new Date());
-  return isBefore(targetDate, today);
-};
-
-const formatFixtures = (fixtures: Fixture[], timezone: string = 'UTC'): FormattedFixturesResponse => {
-  // Create a map to efficiently group by country and league
-  const countryMap = new Map<string, {
-    name: string;
-    flag: string | null;
-    leagues: Map<number, FormattedLeague>;
-  }>();
-
-  // Process each fixture
-  fixtures.forEach((fixture) => {
-    const { league } = fixture;
-    const countryName = league.country;
-
-    // Get or create country entry
-    let countryEntry = countryMap.get(countryName);
-    if (!countryEntry) {
-      countryEntry = {
-        name: countryName,
-        flag: league.flag,
-        leagues: new Map(),
-      };
-      countryMap.set(countryName, countryEntry);
-    }
-
-    // Get or create league entry
-    let leagueEntry = countryEntry.leagues.get(league.id);
-    if (!leagueEntry) {
-      leagueEntry = {
-        id: league.id,
-        name: league.name,
-        logo: league.logo,
-        matches: [],
-      };
-      countryEntry.leagues.set(league.id, leagueEntry);
-    }
-
-    // Convert UTC time to user's timezone
-    const matchDate = new Date(fixture.fixture.date);
-    const localTime = formatInTimeZone(matchDate, timezone, 'HH:mm');
-
-    // Create a minimal match object with only essential data
-    const formattedMatch = {
-      id: fixture.fixture.id,
-      date: format(matchDate, 'yyyy-MM-dd'),
-      time: localTime,
-      timestamp: fixture.fixture.timestamp,
-      status: {
-        long: fixture.fixture.status.long,
-        short: fixture.fixture.status.short,
-        elapsed: fixture.fixture.status.elapsed,
-      },
-      teams: {
-        home: {
-          id: fixture.teams.home.id,
-          logo: fixture.teams.home.logo,
-          name: fixture.teams.home.name,
-          winner: fixture.teams.home.winner,
-        },
-        away: {
-          id: fixture.teams.away.id,
-          logo: fixture.teams.away.logo,
-          name: fixture.teams.away.name,
-          winner: fixture.teams.away.winner,
-        },
-      },
-      score: {
-        home: fixture.goals.home,
-        away: fixture.goals.away,
-      },
-    };
-
-    // Add match to league
-    leagueEntry.matches.push(formattedMatch);
-  });
-
-  // Convert maps to arrays and sort
-  const countries: FormattedCountry[] = Array.from(countryMap.entries())
-    .map(([_, country]) => ({
-      name: country.name,
-      flag: country.flag,
-      leagues: Array.from(country.leagues.values())
-        .map(league => ({
-          ...league,
-          // Sort matches by time
-          matches: league.matches.sort((a, b) => a.time.localeCompare(b.time)),
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  return { countries };
-};
+import {
+  CACHE_PREFIX,
+  CHUNK_SIZE,
+  TODAY_UPDATE_INTERVAL,
+  FUTURE_TTL,
+  getCacheKey,
+  getMetaKey,
+  isToday,
+  isFuture,
+  isPast,
+  formatFixtures,
+} from './utils';
 
 const cacheFixtures = async (date: string, fixtures: Fixture[], live?: boolean): Promise<void> => {
   console.log(`📝 Starting cache operation for ${live ? 'live matches' : 'all matches'} on ${date}`);
   const startTime = performance.now();
-  const ttl = isToday(date) ? TODAY_UPDATE_INTERVAL : isFuture(date) ? FUTURE_TTL(date) : undefined;
+  const ttl = isToday(date) ? TODAY_UPDATE_INTERVAL : isFuture(date) ? FUTURE_TTL(date, fixtures) : undefined;
   
   if (!ttl) {
     console.log('⏭️ Skipping cache - no TTL for past dates');
