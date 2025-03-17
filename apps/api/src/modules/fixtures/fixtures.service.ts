@@ -23,7 +23,7 @@ import {
   formatFixtures,
 } from './utils';
 
-const cacheFixtures = async (date: string, fixtures: Fixture[], live?: boolean): Promise<void> => {
+const cacheFixturesInRedis = async (date: string, fixtures: Fixture[], live?: boolean): Promise<void> => {
   console.log(`📝 Starting cache operation for ${live ? 'live matches' : 'all matches'} on ${date}`);
   const startTime = performance.now();
   const ttl = isToday(date) ? TODAY_UPDATE_INTERVAL : isFuture(date) ? FUTURE_TTL(date, fixtures) : undefined;
@@ -125,7 +125,7 @@ const getFixturesFromCache = async (date: string, live?: boolean): Promise<Fixtu
       const chunkSize = Buffer.byteLength(JSON.stringify(chunk), 'utf8');
       totalSize += chunkSize;
       console.log(`📥 Retrieved chunk ${i} (${(chunkSize / 1024).toFixed(2)} KB)`);
-      fixtures.push(...(chunk as any[]));
+      fixtures.push(...(chunk as Fixture[]));
     }
 
     const duration = (performance.now() - startTime).toFixed(2);
@@ -161,7 +161,7 @@ const getFixturesFromSupabase = async (date: string): Promise<Fixture[]> => {
     }
 
     console.log(`✨ Successfully retrieved ${data.length} fixtures from Supabase in ${duration}ms`);
-    return data.map(row => row.raw_data);
+    return data.map(row => row.raw_data as Fixture);
   } catch (error) {
     const duration = (performance.now() - startTime).toFixed(2);
     console.error(`❌ Error in Supabase query after ${duration}ms:`, error);
@@ -211,6 +211,180 @@ const migrateFixturesIfNeeded = async (date: string): Promise<void> => {
   await redis.del(cacheKey);
 };
 
+const getLiveFixtures = async (timezone: string): Promise<FormattedFixturesResponse> => {
+  console.log('\n🔴 Getting live matches, timezone:', timezone);
+  const startTime = performance.now();
+  
+  try {
+    let fixtures: Fixture[];
+    let source: 'Redis' | 'API' = 'API';
+    let fetchDuration: string;
+
+    // Check Redis cache for live matches
+    console.log('🔄 Checking Redis cache for live matches...');
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const cached = await getFixturesFromCache(today, true);
+    
+    if (cached) {
+      source = 'Redis';
+      fetchDuration = (performance.now() - startTime).toFixed(2);
+      fixtures = cached;
+      console.log(`✅ Using ${fixtures.length} live matches from Redis cache (total time: ${fetchDuration}ms)`);
+    } else {
+      console.log('🌐 Fetching live matches from API...');
+      const apiStartTime = performance.now();
+      const response = await getFootballApiFixtures(today, 'live');
+      const apiDuration = (performance.now() - startTime).toFixed(2);
+      fixtures = response.response;
+      console.log(`✅ Received ${fixtures.length} live matches from API in ${apiDuration}ms`);
+      
+      // Cache live matches
+      console.log('💾 Caching live matches in Redis...');
+      await cacheFixturesInRedis(today, fixtures, true);
+    }
+
+    const totalDuration = (performance.now() - startTime).toFixed(2);
+    console.log(`🎯 Data source used: ${source} (total request time: ${totalDuration}ms)`);
+    return formatFixtures(fixtures, timezone);
+  } catch (error) {
+    const duration = (performance.now() - startTime).toFixed(2);
+    console.error(`❌ Error getting live matches after ${duration}ms:`, error);
+    throw error;
+  }
+};
+
+const storeFixturesInSupabase = async (fixtures: Fixture[], date: string): Promise<void> => {
+  console.log('💾 Storing past fixtures in Supabase...');
+  
+  // Check for existing fixtures first
+  console.log('🔍 Checking for existing fixtures in Supabase...');
+  const { data: existingFixtures } = await db
+    .from(FIXTURES_TABLE)
+    .select('id')
+    .eq('date', date);
+
+  if (existingFixtures && existingFixtures.length > 0) {
+    console.log(`⏩ Skipping insert - ${existingFixtures.length} fixtures already exist for this date`);
+    return;
+  }
+
+  // Transform fixtures for Supabase storage
+  const fixturesForDb = fixtures.map(fixture => ({
+    id: fixture.fixture.id,
+    date,
+    timezone: fixture.fixture.timezone,
+    raw_data: {
+      fixture: {
+        id: fixture.fixture.id,
+        date: fixture.fixture.date,
+        timestamp: fixture.fixture.timestamp,
+        timezone: fixture.fixture.timezone,
+        status: fixture.fixture.status,
+      },
+      league: {
+        id: fixture.league.id,
+        name: fixture.league.name,
+        country: fixture.league.country,
+        flag: fixture.league.flag,
+        logo: fixture.league.logo,
+      },
+      teams: {
+        home: {
+          id: fixture.teams.home.id,
+          name: fixture.teams.home.name,
+          logo: fixture.teams.home.logo,
+          winner: fixture.teams.home.winner,
+        },
+        away: {
+          id: fixture.teams.away.id,
+          name: fixture.teams.away.name,
+          logo: fixture.teams.away.logo,
+          winner: fixture.teams.away.winner,
+        },
+      },
+      goals: fixture.goals,
+      score: {
+        halftime: fixture.score.halftime,
+        fulltime: fixture.score.fulltime,
+      },
+    },
+  }));
+  
+  try {
+    const { data, error } = await db.from(FIXTURES_TABLE).insert(fixturesForDb);
+    if (error) {
+      console.error('❌ Error inserting fixtures into Supabase:', error);
+      throw error;
+    }
+    console.log(`✅ Successfully stored ${fixturesForDb.length} fixtures in Supabase`);
+  } catch (error) {
+    console.error('❌ Failed to store fixtures in Supabase:', error);
+    throw error;
+  }
+};
+
+const getDateFixtures = async (date: string, timezone: string): Promise<FormattedFixturesResponse> => {
+  console.log('\n📅 Getting fixtures for date:', date, 'timezone:', timezone);
+  const startTime = performance.now();
+
+  try {
+    let fixtures: Fixture[];
+    let source: 'Supabase' | 'Redis' | 'API' = 'API';
+    let fetchDuration: string;
+
+    // For past dates, check Supabase first
+    if (isPast(date)) {
+      console.log('📆 Date is in the past, checking Supabase first...');
+      try {
+        await migrateFixturesIfNeeded(date);
+        fixtures = await getFixturesFromSupabase(date);
+        if (fixtures.length > 0) {
+          source = 'Supabase';
+          fetchDuration = (performance.now() - startTime).toFixed(2);
+          console.log(`✅ Using ${fixtures.length} fixtures from Supabase (total time: ${fetchDuration}ms)`);
+          return formatFixtures(fixtures, timezone);
+        }
+        console.log('➡️ No fixtures in Supabase, will try Redis/API...');
+      } catch (error) {
+        console.error('❌ Error accessing Supabase:', error);
+      }
+    }
+
+    // Check Redis cache for regular fixtures
+    console.log('🔄 Checking Redis cache...');
+    const cachedFixtures = await getFixturesFromCache(date, false);
+    
+    if (cachedFixtures) {
+      source = 'Redis';
+      fetchDuration = (performance.now() - startTime).toFixed(2);
+      fixtures = cachedFixtures;
+      console.log(`✅ Using ${fixtures.length} fixtures from Redis cache (total time: ${fetchDuration}ms)`);
+    } else {
+      console.log('🌐 Fetching fixtures from API...');
+      const apiStartTime = performance.now();
+      const response = await getFootballApiFixtures(date);
+      const apiDuration = (performance.now() - startTime).toFixed(2);
+      fixtures = response.response;
+      console.log(`✅ Received ${fixtures.length} fixtures from API in ${apiDuration}ms`);
+      
+      if (isPast(date)) {
+        await storeFixturesInSupabase(fixtures, date);
+      } else {
+        console.log('💾 Caching fixtures in Redis...');
+        await cacheFixturesInRedis(date, fixtures, false);
+      }
+    }
+
+    const totalDuration = (performance.now() - startTime).toFixed(2);
+    console.log(`🎯 Data source used: ${source} (total request time: ${totalDuration}ms)`);
+    return formatFixtures(fixtures, timezone);
+  } catch (error) {
+    const duration = (performance.now() - startTime).toFixed(2);
+    console.error(`❌ Error in getFixtures after ${duration}ms:`, { error, date, timezone });
+    throw error;
+  }
+};
+
 export const fixturesService = {
   async getFixtures({ 
     date, 
@@ -221,172 +395,11 @@ export const fixturesService = {
     timezone: string;
     live?: 'all';
   }): Promise<FormattedFixturesResponse> {
-    const startTime = performance.now();
-
     if (live === 'all') {
-      console.log('\n🔴 Getting live matches, timezone:', timezone);
-      try {
-        let fixtures: Fixture[];
-        let source: 'Redis' | 'API' = 'API';
-        let fetchDuration: string;
-
-        // Check Redis cache for live matches
-        console.log('🔄 Checking Redis cache for live matches...');
-        const today = format(new Date(), 'yyyy-MM-dd');
-        const cached = await getFixturesFromCache(today, true);
-        
-        if (cached) {
-          source = 'Redis';
-          fetchDuration = (performance.now() - startTime).toFixed(2);
-          fixtures = cached;
-          console.log(`✅ Using ${fixtures.length} live matches from Redis cache (total time: ${fetchDuration}ms)`);
-        } else {
-          console.log('🌐 Fetching live matches from API...');
-          const apiStartTime = performance.now();
-          const response = await getFootballApiFixtures(today, 'live');
-          const apiDuration = (performance.now() - startTime).toFixed(2);
-          fixtures = response.response;
-          console.log(`✅ Received ${fixtures.length} live matches from API in ${apiDuration}ms`);
-          
-          // Cache live matches
-          console.log('💾 Caching live matches in Redis...');
-          await cacheFixtures(today, fixtures, true);
-        }
-
-        const totalDuration = (performance.now() - startTime).toFixed(2);
-        console.log(`🎯 Data source used: ${source} (total request time: ${totalDuration}ms)`);
-        return formatFixtures(fixtures, timezone);
-      } catch (error) {
-        const duration = (performance.now() - startTime).toFixed(2);
-        console.error(`❌ Error getting live matches after ${duration}ms:`, error);
-        throw error;
-      }
+      return getLiveFixtures(timezone);
     }
 
-    // Regular date-based fixtures flow
     const queryDate = date || format(new Date(), 'yyyy-MM-dd');
-    console.log('\n📅 Getting fixtures for date:', queryDate, 'timezone:', timezone);
-
-    try {
-      let fixtures: Fixture[];
-      let source: 'Supabase' | 'Redis' | 'API' = 'API';
-      let fetchDuration: string;
-
-      // For past dates, check Supabase first
-      if (isPast(queryDate)) {
-        console.log('📆 Date is in the past, checking Supabase first...');
-        try {
-          await migrateFixturesIfNeeded(queryDate);
-          fixtures = await getFixturesFromSupabase(queryDate);
-          if (fixtures.length > 0) {
-            source = 'Supabase';
-            fetchDuration = (performance.now() - startTime).toFixed(2);
-            console.log(`✅ Using ${fixtures.length} fixtures from Supabase (total time: ${fetchDuration}ms)`);
-            return formatFixtures(fixtures, timezone);
-          }
-          console.log('➡️ No fixtures in Supabase, will try Redis/API...');
-        } catch (error) {
-          console.error('❌ Error accessing Supabase:', error);
-        }
-      }
-
-      // Check Redis cache for regular fixtures
-      console.log('🔄 Checking Redis cache...');
-      const cached = await getFixturesFromCache(queryDate, false);
-      
-      if (cached) {
-        source = 'Redis';
-        fetchDuration = (performance.now() - startTime).toFixed(2);
-        fixtures = cached;
-        console.log(`✅ Using ${fixtures.length} fixtures from Redis cache (total time: ${fetchDuration}ms)`);
-      } else {
-        console.log('🌐 Fetching fixtures from API...');
-        const apiStartTime = performance.now();
-        const response = await getFootballApiFixtures(queryDate);
-        const apiDuration = (performance.now() - startTime).toFixed(2);
-        fixtures = response.response;
-        console.log(`✅ Received ${fixtures.length} fixtures from API in ${apiDuration}ms`);
-        
-        if (isPast(queryDate)) {
-          console.log('💾 Storing past fixtures in Supabase...');
-          
-          // Check for existing fixtures first
-          console.log('🔍 Checking for existing fixtures in Supabase...');
-          const { data: existingFixtures } = await db
-            .from(FIXTURES_TABLE)
-            .select('id')
-            .eq('date', queryDate);
-
-          if (existingFixtures && existingFixtures.length > 0) {
-            console.log(`⏩ Skipping insert - ${existingFixtures.length} fixtures already exist for this date`);
-          } else {
-            // For past dates, store directly in Supabase
-            const fixturesForDb = fixtures.map(fixture => ({
-              id: fixture.fixture.id,
-              date: queryDate,
-              timezone: fixture.fixture.timezone,
-              raw_data: {
-                fixture: {
-                  id: fixture.fixture.id,
-                  date: fixture.fixture.date,
-                  timestamp: fixture.fixture.timestamp,
-                  timezone: fixture.fixture.timezone,
-                  status: fixture.fixture.status,
-                },
-                league: {
-                  id: fixture.league.id,
-                  name: fixture.league.name,
-                  country: fixture.league.country,
-                  flag: fixture.league.flag,
-                  logo: fixture.league.logo,
-                },
-                teams: {
-                  home: {
-                    id: fixture.teams.home.id,
-                    name: fixture.teams.home.name,
-                    logo: fixture.teams.home.logo,
-                    winner: fixture.teams.home.winner,
-                  },
-                  away: {
-                    id: fixture.teams.away.id,
-                    name: fixture.teams.away.name,
-                    logo: fixture.teams.away.logo,
-                    winner: fixture.teams.away.winner,
-                  },
-                },
-                goals: fixture.goals,
-                score: {
-                  halftime: fixture.score.halftime,
-                  fulltime: fixture.score.fulltime,
-                },
-              },
-            }));
-            
-            try {
-              const { data, error } = await db.from(FIXTURES_TABLE).insert(fixturesForDb);
-              if (error) {
-                console.error('❌ Error inserting fixtures into Supabase:', error);
-                throw error;
-              }
-              console.log(`✅ Successfully stored ${fixturesForDb.length} fixtures in Supabase`);
-            } catch (error) {
-              console.error('❌ Failed to store fixtures in Supabase:', error);
-              throw error;
-            }
-          }
-        } else {
-          console.log('💾 Caching fixtures in Redis...');
-          await cacheFixtures(queryDate, fixtures, false);
-        }
-      }
-
-      const totalDuration = (performance.now() - startTime).toFixed(2);
-      console.log(`🎯 Data source used: ${source} (total request time: ${totalDuration}ms)`);
-      return formatFixtures(fixtures, timezone);
-    } catch (error) {
-      const duration = (performance.now() - startTime).toFixed(2);
-      console.error(`❌ Error in getFixtures after ${duration}ms:`, { error, date: queryDate, timezone });
-      throw error;
-    }
-  },
+    return getDateFixtures(queryDate, timezone);
+  }
 }; 
