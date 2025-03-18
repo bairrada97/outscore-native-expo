@@ -5,6 +5,7 @@
 //   optic.prop("favorite_teams")
 // );
 
+import React, { useEffect, useState } from 'react';
 import { useDelay } from "@/hooks/useDelay";
 import { useFixtureStatus } from "@/hooks/useFixtureStatus";
 import usePrevious from "@/hooks/usePrevious";
@@ -13,16 +14,23 @@ import {
   FIXTURE_IS_LIVE_STATUS,
 } from "@/utils/fixturesStatusConstants";
 import { cn } from "@/utils/misc";
-import { transformFixtureData } from "@/utils/transform-fixture-data";
 import { tva } from "@gluestack-ui/nativewind-utils/tva";
 import { Link } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import { FixtureStatus } from "../FixtureStatus/FixtureStatus";
-import { FixtureTeam } from "../FixtureTeam/FixtureTeam";
 import { Pressable, TouchableOpacity, View } from "react-native";
 import { Text } from "../ui/text";
 import SvgB004 from "../ui/SvgIcons/B004";
 import { FavoritesIcon } from "../FavoritesIcon/FavoritesIcon";
+import { FormattedMatch } from "@outscore/shared-types";
+import { FixtureStatus } from "../FixtureStatus/FixtureStatus";
+import { FixtureTeam } from "../FixtureTeam/FixtureTeam";
+
+// Define the MatchOutcomeType type
+type MatchOutcomeType = 'win' | 'loss' | 'draw' | null;
+
+// Add additional properties to FormattedMatch for this component
+interface ExtendedFormattedMatch extends FormattedMatch {
+  type?: 'H2H' | 'favorite-team' | null;
+}
 
 // const globalUserPreferencesAtom = atom(
 //   (get) => get(userPreferencesState).notification_settings
@@ -47,160 +55,60 @@ const cardMatch = tva({
   },
 });
 
-export interface CardMatchProps {
-  fixture: transformFixtureData;
-  type?: "H2H" | "favorite-team" | null;
-  matchOutcome?: MatchOutcomeType | null;
-  shouldPrefetch?: boolean;
-  isLastMatch: boolean;
+interface CardMatchProps {
+  fixture: ExtendedFormattedMatch;
+  isLastMatch?: boolean;
+  isFromFavorites?: boolean;
+  onFavoritePress?: () => void;
 }
 
-export const CardMatch = ({
+export const CardMatch: React.FC<CardMatchProps> = ({
   fixture,
-  type = null,
-  matchOutcome = null,
-  shouldPrefetch = true,
-  isLastMatch,
-}: CardMatchProps) => {
-  // const [notificationBarMessage, showNotificationBarMessage] = useState<
-  // 	string | null
-  // >(null)
-  // const [notificationBarShowed, showNotificationBar] = useState(false)
-  const [, setPopupOpen] = useState(false);
-  // const [openInstallAppAdvice, setOpenInstallAppAdvice] = useState(false)
-
-  // const [userClickedFavorites, setUserClickedFavorites] = useAtom(
-  //   userClickedFavoritesAtom
-  // );
-  // const [favoriteMatches, setFavoriteMatchesAtom] = useAtom(favoriteMatchesAtom)
-
-  // const [favoriteTeams, setFavoriteTeams] = useAtom(favoriteTeamsAtom)
-  // const [userPreferencesId, setUserPreferencesId] = useAtom(
-  // 	userPreferencesIdAtom,
-  // )
-
-  // const [userPreferences, setUserPreferencesStore] =
-  // 	useAtom(userPreferencesState)
-  // const [globalUserPreferences] = useAtom(globalUserPreferencesAtom)
-  const { status, teams, score, goals, timestamp, date, id } = fixture;
-
-  const [statusState, setStatus] = useState<string | null>(null);
-  const [teamScored, setTeamScore] = useState({
+  isLastMatch = false,
+  isFromFavorites = false,
+  onFavoritePress,
+}) => {
+  const [teamScored, setTeamScored] = useState<{ home: boolean; away: boolean }>({
     home: false,
     away: false,
   });
 
+  const { id, status, teams, score, goals, timezone, timestamp, date, type = null } = fixture;
+  
   const { renderFixtureStatus, fixtureStatus } = useFixtureStatus({
     status,
     date,
+    timezone,
     type,
-    timezone: fixture.timezone,
   });
 
-  const delay = useDelay();
+  const matchIsLive = fixtureStatus.isLive;
+  const matchIsFinished = fixtureStatus.isFinished;
+  
+  // Safely get the home and away goals with proper null checks
+  const homeTeamGoals = (score?.fulltime?.home ?? score?.penalty?.home) ?? goals?.home ?? 0;
+  const awayTeamGoals = (score?.fulltime?.away ?? score?.penalty?.away) ?? goals?.away ?? 0;
+
+  const [statusState, setStatus] = useState<string | null>(null);
 
   const TIME_TO_RESET_GOAL_STYLES = 60_000; //1 minute;
 
-  const homeTeamGoals = score.penalty.home || goals.home;
-  const awayTeamGoals = score.penalty.away || goals.away;
   const matchCurrentTime = status?.elapsed;
-  const notH2H = type != "H2H";
-
-  const goalScored = async () => {
-    if (!previousState) return;
-    setValues();
-    await delay(TIME_TO_RESET_GOAL_STYLES);
-    resetValues();
-  };
-
-  const previousState = usePrevious({
-    homeTeamGoals,
-    awayTeamGoals,
-    matchCurrentTime,
-  });
-
-  const setValues = () => {
-    if (awayTeamGoals! > previousState?.awayTeamGoals! || null) {
-      setTeamScore({ home: false, away: true });
-    }
-    if (homeTeamGoals! > previousState?.homeTeamGoals! || null) {
-      setTeamScore({ home: true, away: false });
-    }
-  };
+  const notH2H = type !== "H2H";
 
   const resetValues = () => {
-    setTeamScore({
+    setTeamScored({
       home: false,
       away: false,
     });
   };
 
-  // const toggleMatchToFavorites = async (id: number) => {
-  // 	let favoritesArray = favoriteMatches
-  // 	let favoritesMatchesIds = favoritesArray.map(match => match.match_id)
-  // 	const updatedNotificationSettings =
-  // 		userPreferences.notification_settings.map(item => {
-  // 			return JSON.parse(JSON.stringify(item))
-  // 		}) as UserNotificationPreferences['notification_settings']
-  // 	if (favoritesMatchesIds.includes(id)) {
-  // 		favoritesMatchesIds = deleteFavoriteMatch(favoritesMatchesIds, id)
-  // 		favoritesArray = favoritesArray.filter(match =>
-  // 			favoritesMatchesIds.includes(match.match_id),
-  // 		)
-  // 		//  showNotificationBar(true);
-  // 		//  showNotificationBarMessage(NOTIFICATION_BAR_MATCH_REMOVED);
-  // 		//  setTimeout(() => {
-  // 		//    showNotificationBar(false);
-  // 		//  }, NOTIFICATION_BAR_SHOWED_TIMER);
-  // 	} else {
-  // 		//  if (!favoritesMatchesIds.length) {
-  // 		//    OneSignalReact.showNativePrompt();
-  // 		//  }
-
-  // 		favoritesArray.push({
-  // 			alerts: updatedNotificationSettings,
-  // 			addedFrom: 'match',
-  // 			match_id: id,
-  // 		})
-
-  // 		// showNotificationBar(true)
-  // 		// showNotificationBarMessage(NOTIFICATION_BAR_MATCH_ADDED)
-  // 		// setUserClickedFavorites(true)
-
-  // 		// setTimeout(() => {
-  // 		// 	showNotificationBar(false)
-  // 		// }, NOTIFICATION_BAR_SHOWED_TIMER)
-  // 	}
-
-  // 	let userNotificationPreferences: UserNotificationPreferences
-  // 	setFavoriteMatchesAtom(favoritesArray)
-  // 	setFavoriteTeams(favoriteTeams)
-
-  // 	userNotificationPreferences = {
-  // 		//user_id: await OneSignalReact.getUserId(),
-  // 		user_id: '',
-  // 		notification_settings: updatedNotificationSettings,
-  // 		favorite_matches: favoritesArray,
-  // 		favorite_teams: favoriteTeams,
-  // 	}
-
-  // 	setUserPreferencesStore(userNotificationPreferences)
-  // 	//  addUserNotificationPreferencesToDB(userNotificationPreferences);
-  // }
-
-  useMemo(() => {
-    setStatus(renderFixtureStatus()!);
-  }, [status, timestamp, type]);
-
   useEffect(() => {
-    goalScored();
+    setStatus(renderFixtureStatus()!);
+  }, [status, timestamp, type, renderFixtureStatus]);
 
-    return () => {
-      resetValues();
-    };
-  }, [homeTeamGoals, awayTeamGoals, matchCurrentTime]);
-
-  const url = `/match/${id}/${teams.home
+  console.log(teams)
+  const url = `fixture/${id}-${teams.home
     .name!.toLowerCase()
     .replace("/", "")
     .split(" ")
@@ -211,90 +119,87 @@ export const CardMatch = ({
     .join("-")}`;
 
   return (
-    <Link href={url} className="h-64 font-sourceSansPro text-16" asChild>
-      <Pressable>
-        <View
-          className={cn(
-            "dark:text-neu-04 cardMatch relative box-border flex flex-1 flex-row items-center gap-x-8 px-16",
-            !isLastMatch ? "border-b-[1px] border-neu-04" : "",
-          )}
-        >
-          {fixtureStatus.isLive && (
-            <View className="absolute left-[6px] top-[calc(50%-48px/2)] z-10 h-48 w-[2px] rounded-[4px] bg-m-01--light-03" />
-          )}
+    <Pressable className="h-64 font-sourceSansPro text-16">
+      <View
+        className={cn(
+          "dark:text-neu-04 cardMatch relative box-border flex flex-1 flex-row items-center gap-x-8 px-16",
+          !isLastMatch ? "border-b-[1px] border-neu-04" : "",
+        )}
+      >
+        {fixtureStatus.isLive && (
+          <View className="absolute left-[6px] top-[calc(50%-48px/2)] z-10 h-48 w-[2px] rounded-[4px] bg-m-01--light-03" />
+        )}
 
-          {(teamScored.home || teamScored.away) && (
-            <View
-              className={cn(
-                "",
-                teamScored.home || teamScored.away
-                  ? "absolute left-4 top-4 h-[calc(100%_-_8px)] w-[calc(100%_-_8px)] rounded-[4px] bg-m-01--light-02 opacity-[0.1]"
-                  : "",
-              )}
-            ></View>
-          )}
-          <FixtureStatus
-            status={statusState!}
-            matchIsLiveOrFinished={
-              FIXTURE_IS_LIVE_STATUS.includes(fixture.status?.short!) ||
-              (FIXTURE_IS_FINISHED_STATUS.includes(fixture.status?.short!) &&
-                notH2H)
+        {(teamScored.home || teamScored.away) && (
+          <View
+            className={cn(
+              "",
+              teamScored.home || teamScored.away
+                ? "absolute left-4 top-4 h-[calc(100%_-_8px)] w-[calc(100%_-_8px)] rounded-[4px] bg-m-01--light-02 opacity-[0.1]"
+                : "",
+            )}
+          ></View>
+        )}
+        <FixtureStatus
+          status={statusState!}
+          matchIsLiveOrFinished={
+            matchIsLive ||
+            (matchIsFinished && notH2H)
+          }
+        />
+
+        <View className="flex min-w-0 flex-1 flex-col gap-y-4 self-center">
+          <FixtureTeam
+            isGoal={teamScored.home}
+            score={homeTeamGoals}
+            name={teams.home.name!}
+            winner={
+              matchIsFinished &&
+              teams.home.winner!
             }
           />
-
-          <View className="flex min-w-0 flex-1 flex-col gap-y-4 self-center">
-            <FixtureTeam
-              isGoal={teamScored.home}
-              score={homeTeamGoals!}
-              name={teams.home.name!}
-              winner={
-                FIXTURE_IS_FINISHED_STATUS.includes(statusState!) &&
-                teams.home.winner!
-              }
-            />
-            <FixtureTeam
-              isGoal={teamScored.away}
-              score={awayTeamGoals!}
-              name={teams.away.name!}
-              winner={
-                FIXTURE_IS_FINISHED_STATUS.includes(statusState!) &&
-                teams.away.winner!
-              }
-            />
-          </View>
-          {notH2H && (
-            <>
-              <FavoritesIcon
-                handlePress={(e: MouseEvent) => {
-                  e.preventDefault();
-                  // toggleMatchToFavorites(id!);
-                }}
-                isActive={
-                  // !!isMatchInFavorites({ favoriteMatches, matchId: id! })
-                  false
-                }
-              />
-
-              <Pressable
-                className=""
-                onPress={(e) => {
-                  e.preventDefault();
-                  setPopupOpen(true);
-                }}
-              >
-                <SvgB004
-                  width={24}
-                  height={24}
-                  aria-label="View More Icon"
-                  className="z-70 dark:text-neu-04 ml-8 text-neu-07"
-                />
-              </Pressable>
-            </>
-          )}
-          {/* Additional commented code remains unchanged */}
+          <FixtureTeam
+            isGoal={teamScored.away}
+            score={awayTeamGoals}
+            name={teams.away.name!}
+            winner={
+              matchIsFinished &&
+              teams.away.winner!
+            }
+          />
         </View>
-      </Pressable>
-    </Link>
+        {/* {notH2H && (
+          <>
+            <FavoritesIcon
+              handlePress={(e: MouseEvent) => {
+                e.preventDefault();
+                // toggleMatchToFavorites(id!);
+              }}
+              isActive={
+                // !!isMatchInFavorites({ favoriteMatches, matchId: id! })
+                false
+              }
+            />
+
+            <Pressable
+              className=""
+              onPress={(e) => {
+                e.preventDefault();
+                setPopupOpen(true);
+              }}
+            >
+              <SvgB004
+                width={24}
+                height={24}
+                aria-label="View More Icon"
+                className="z-70 dark:text-neu-04 ml-8 text-neu-07"
+              />
+            </Pressable>
+          </>
+        )} */}
+        {/* Additional commented code remains unchanged */}
+      </View>
+    </Pressable>
   );
 };
 

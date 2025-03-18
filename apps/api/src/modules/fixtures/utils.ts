@@ -5,6 +5,7 @@ import {
   FormattedFixturesResponse,
   FormattedCountry,
   FormattedLeague,
+  FormattedMatch,
 } from '../../pkg/types/football-api';
 
 export const CACHE_PREFIX = 'fixtures';
@@ -104,6 +105,7 @@ export const formatFixtures = (fixtures: Fixture[], timezone: string = 'UTC'): F
       date: format(matchDate, 'yyyy-MM-dd'),
       time: localTime,
       timestamp: fixture.fixture.timestamp,
+      timezone: fixture.fixture.timezone,
       status: {
         long: fixture.fixture.status.long,
         short: fixture.fixture.status.short,
@@ -124,10 +126,20 @@ export const formatFixtures = (fixtures: Fixture[], timezone: string = 'UTC'): F
         },
       },
       score: {
+        fulltime: {
+          home: fixture.score.fulltime.home,
+          away: fixture.score.fulltime.away,
+        },
+        penalty: {
+          home: fixture.score.penalty.home,
+          away: fixture.score.penalty.away,
+        }
+      },
+      goals: {
         home: fixture.goals.home,
         away: fixture.goals.away,
       },
-    };
+    } satisfies FormattedMatch
 
     // Add match to league
     leagueEntry.matches.push(formattedMatch);

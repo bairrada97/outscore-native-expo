@@ -32,8 +32,7 @@ export default function FixturesByDate({
 			<ScrollView className="bg-neu-02 pt-16">
 				<TitleSection>Favorite Competitions</TitleSection>
 				<View className="px-16">
-					<Text>{data.length}</Text>
-					{/* <FavoriteFixtureList data={allMatches} /> */}
+					<FavoriteFixtureList data={data} />
 				</View>
 				<TitleSection>All Competitions</TitleSection>
 				<View className="px-16">

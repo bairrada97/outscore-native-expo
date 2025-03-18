@@ -46,9 +46,9 @@ export type FixtureStatusShort =
 	| 'P'
 
 export interface FixtureStatus {
-	elapsed?: number
-	long?: string
-	short?: FixtureStatusShort
+	long: string;
+	short: FixtureStatusShort;
+	elapsed: number | null;
 }
 
 export interface FixtureVenue {

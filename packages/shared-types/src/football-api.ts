@@ -20,7 +20,7 @@ export interface Fixture {
     };
     status: {
       long: string;
-      short: string;
+      short: FixtureStatusShort;
       elapsed: number | null;
     };
   };
@@ -92,9 +92,10 @@ export interface FormattedMatch {
   date: string;
   time: string;
   timestamp: number;
+  timezone: string;
   status: {
     long: string;
-    short: string;
+    short: FixtureStatusShort; 
     elapsed: number | null;
   };
   teams: {
@@ -112,6 +113,16 @@ export interface FormattedMatch {
     };
   };
   score: {
+    fulltime: {
+      home: number | null;
+      away: number | null;
+    };
+    penalty: {
+      home: number | null;
+      away: number | null;
+    };
+  };
+  goals: {
     home: number | null;
     away: number | null;
   };
@@ -131,3 +142,17 @@ export interface FormattedCountry {
 }
 
 export type FormattedFixturesResponse = FormattedCountry[]; 
+
+export type FixtureStatusShort =
+	| 'CANC'
+	| 'PST'
+	| 'ABD'
+	| 'WO'
+	| 'FT'
+	| 'HT'
+	| 'INT'
+	| 'PEN'
+	| 'NS'
+	| 'AET'
+	| 'BT'
+	| 'P'

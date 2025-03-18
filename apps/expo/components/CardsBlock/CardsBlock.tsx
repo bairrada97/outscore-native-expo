@@ -19,7 +19,7 @@ export const CardsBlock = ({
   return (
     <View
       className={cn(
-        `dark:bg-neu-11 dark:shadow-sha-06 mb-8 flex flex-1 rounded-[8px] bg-[white] shadow-sha-01 ${className}`,
+        `dark:bg-neu-11 dark:shadow-sha-06 mb-8 flex  rounded-[8px] bg-[white] shadow-sha-01 ${className}`,
       )}
     >
       <TitleBlock extraInfo={extraInfo} className="">

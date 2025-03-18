@@ -11,7 +11,7 @@ import * as SplashScreen from 'expo-splash-screen'
 import { useEffect, useState } from 'react'
 import 'react-native-reanimated'
 import React from 'react'
-import { isSameDay } from 'date-fns'
+import { isSameDay, format } from 'date-fns'
 
 import { useColorScheme } from '@/hooks/useColorScheme'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
@@ -97,6 +97,9 @@ const persistOptions = {
 	}, 
 }
 
+// Track the date to detect day changes between app uses
+const LAST_TODAY_DATE_KEY = 'lastTodayDate';
+
 // App content that depends on the TimeZone being loaded
 function AppContent() {
 	const { timeZone, isLoading } = useTimeZone();
@@ -129,6 +132,57 @@ function AppContent() {
 		};
 		
 		debugCacheState();
+	}, []);
+	
+	// Check for date change when the app is loaded
+	useEffect(() => {
+		const checkDateChange = async () => {
+			try {
+				// Get today's date formatted as YYYY-MM-DD for consistency
+				const todayFormatted = format(new Date(), 'yyyy-MM-dd');
+				
+				// Get the last stored "today" date
+				const lastTodayDate = await AsyncStorage.getItem(LAST_TODAY_DATE_KEY);
+				
+				console.log('Current date:', todayFormatted, 'Last stored date:', lastTodayDate || 'none');
+				
+				// If we have a stored date and it's different from today
+				if (lastTodayDate && lastTodayDate !== todayFormatted) {
+					console.log('Day changed from', lastTodayDate, 'to', todayFormatted);
+					
+					// When the date changes, we need new fixtures for the new date range
+					console.log('Invalidating fixture queries due to date change');
+					try {
+						queryClient.invalidateQueries({
+							predicate: (query) => {
+								return Array.isArray(query.queryKey) && 
+									query.queryKey[0] === 'fixtures-by-date';
+							}
+						});
+					} catch (invalidateError) {
+						console.error('Error invalidating queries:', invalidateError);
+					}
+				}
+				
+				// Always store today's date for future comparison
+				try {
+					await AsyncStorage.setItem(LAST_TODAY_DATE_KEY, todayFormatted);
+					console.log('Stored today\'s date:', todayFormatted);
+				} catch (storeError) {
+					console.error('Error storing today\'s date:', storeError);
+				}
+				
+				// Always reset prefetch status to ensure we load with current date
+				setPrefetchStarted(false);
+				
+			} catch (error) {
+				console.error('Error in date change check:', error);
+				// Ensure prefetch still happens even if date check fails
+				setPrefetchStarted(false);
+			}
+		};
+		
+		checkDateChange();
 	}, []);
 	
 	// Prefetch data only once after timezone is loaded

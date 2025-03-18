@@ -1,41 +1,24 @@
-import { transformFixtureData } from '@/utils/transform-fixture-data'
 import { CardMatch } from '../CardMatch/CardMatch'
 import { CardsBlock } from '../CardsBlock/CardsBlock'
 import { FixtureOverview, League } from '@/utils/outscore-repository'
 import { NoResultsBox } from '../NoResultsBox/NoResultsBox'
 import { View } from 'react-native'
+import { FormattedCountry, FormattedLeague } from '../../../../packages/shared-types/dist'
 
-const List = ({ data, groupBy }: { data: any; groupBy?: boolean }) => {
+const List = ({ data, groupBy }: { data: FormattedLeague[]; groupBy?: boolean }) => {
 	return (
-		<>
-			{groupBy
-				? data?.map((dataItem: any, index: number) => {
+		<View>
+			{ data?.map((leagues, index: number) => {
 						return (
 							<CardsBlock
-								key={dataItem[0].league.name + index}
-								title={dataItem[0].league.name}
+								key={leagues.name + index}
+								title={leagues.name}
 							>
-								{Object.values(dataItem).map((fixture: any) => {
+								{leagues.matches.map((match) => {
 									return (
 										<CardMatch
-											key={fixture.fixture.id}
-											fixture={transformFixtureData(fixture)}
-											shouldPrefetch={true}
-											isLastMatch={false}
-										/>
-									)
-								})}
-							</CardsBlock>
-						)
-					})
-				: Object.entries(data)?.map(([leagueName, dataItem]) => {
-						return (
-							<CardsBlock key={leagueName} title={leagueName}>
-								{Object.values(dataItem as any).map((fixture: any) => {
-									return (
-										<CardMatch
-											key={fixture.fixture.id}
-											fixture={transformFixtureData(fixture)}
+											key={match.id}
+											fixture={match}
 											shouldPrefetch={true}
 											isLastMatch={false}
 										/>
@@ -44,7 +27,7 @@ const List = ({ data, groupBy }: { data: any; groupBy?: boolean }) => {
 							</CardsBlock>
 						)
 					})}
-		</>
+		</View>
 	)
 }
 
@@ -52,36 +35,36 @@ export const FavoriteFixtureList = ({
 	data,
 	groupBy = true,
 }: {
-	data: any
+	data: FormattedCountry[]
 	groupBy?: boolean
 }) => {
 	const favoriteLeaguesID = [1, 2, 3, 94, 39, 88, 140, 135, 61, 78, 743, 960]
-
-	let formatFavoriteData: League | FixtureOverview[] | FixtureOverview[][]
-
+ 
+	let formatFavoriteData: FormattedLeague[] = []
 	if (groupBy) {
-		formatFavoriteData = Object.values(data.response!)
-			?.map((country: any) => Object.values(country.league))
-			?.flat(1)
-			?.filter((item: any) =>
-				item?.find((league: any) =>
-					favoriteLeaguesID.includes(league.league.id),
-				),
-			) as any
-	} else {
-		formatFavoriteData = data.reduce((acc: any, match: FixtureOverview) => {
-			acc[match.league.name] = acc[match.league.name] || []
-			acc[match.league.name]?.push(match)
+		formatFavoriteData = data
+			?.map((country) => country.leagues)
+			.flat(1)
+			?.filter((league: FormattedLeague) => 
+				favoriteLeaguesID.includes(league.id)				
+			)
 
-			return acc
-		}, {}) as any
-	}
+	 }
+	 // else {
+	// 	formatFavoriteData = data.reduce((acc: any, match: FixtureOverview) => {
+	// 		acc[match.league.name] = acc[match.league.name] || []
+	// 		acc[match.league.name]?.push(match)
+
+	// 		return acc
+	// 	}, {}) as any
+	// }
 
 	return (
 		<View>
 			{Object.keys(formatFavoriteData).length ? (
 				Array(formatFavoriteData).length ? (
-					<List data={formatFavoriteData!} groupBy={groupBy} />
+					<List data={formatFavoriteData} groupBy={groupBy} />
+					
 				) : true ? (
 					<NoResultsBox text="There are no ongoing matches on your favorite competitions." />
 				) : (
