@@ -148,5 +148,6 @@ export const formatFixtures = (fixtures: Fixture[], timezone: string = 'UTC'): F
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  return { countries };
+  // Return the countries array directly instead of wrapping it in an object
+  return countries;
 }; 

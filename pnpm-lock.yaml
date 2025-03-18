@@ -144,9 +144,15 @@ importers:
       '@shopify/react-native-skia':
         specifier: ^1.10.2
         version: 1.11.18(react-native-reanimated@3.16.7)(react-native@0.76.6)(react@18.3.1)
+      '@tanstack/query-async-storage-persister':
+        specifier: ^5.69.0
+        version: 5.69.0
       '@tanstack/react-query':
         specifier: ^5.60.5
         version: 5.68.0(react@18.3.1)
+      '@tanstack/react-query-persist-client':
+        specifier: ^5.69.0
+        version: 5.69.0(@tanstack/react-query@5.68.0)(react@18.3.1)
       '@types/date-fns':
         specifier: ^2.6.3
         version: 2.6.3
@@ -5912,8 +5918,35 @@ packages:
       tslib: 2.8.1
     dev: false
 
+  /@tanstack/query-async-storage-persister@5.69.0:
+    resolution: {integrity: sha512-mM5yWF7qnoWn9GjAf0CtpU77cgfVhxRNzG0X19qkFbkHBvummeEAbgqLU6HHxcC6yxN56ipwGjDXSm2ECBjRhw==}
+    dependencies:
+      '@tanstack/query-persist-client-core': 5.69.0
+    dev: false
+
   /@tanstack/query-core@5.68.0:
     resolution: {integrity: sha512-r8rFYYo8/sY/LNaOqX84h12w7EQev4abFXDWy4UoDVUJzJ5d9Fbmb8ayTi7ScG+V0ap44SF3vNs/45mkzDGyGw==}
+    dev: false
+
+  /@tanstack/query-core@5.69.0:
+    resolution: {integrity: sha512-Kn410jq6vs1P8Nm+ZsRj9H+U3C0kjuEkYLxbiCyn3MDEiYor1j2DGVULqAz62SLZtUZ/e9Xt6xMXiJ3NJ65WyQ==}
+    dev: false
+
+  /@tanstack/query-persist-client-core@5.69.0:
+    resolution: {integrity: sha512-OisxDgcDH0ajswGBA+TXXSn5uzll1EaCB6/MQH+2+t4JqR/qq5TS8nh6A7pas/GBFB01kNpgKRYmZp0tkKVtOg==}
+    dependencies:
+      '@tanstack/query-core': 5.69.0
+    dev: false
+
+  /@tanstack/react-query-persist-client@5.69.0(@tanstack/react-query@5.68.0)(react@18.3.1):
+    resolution: {integrity: sha512-/uIblBRwnpms6Xu+71Jy+2V+iuWrSyDfeYVNp8kbyYOKP9135ii/S80+EXBGeM/jx7+vizRGORaq4kKuKXo6Sw==}
+    peerDependencies:
+      '@tanstack/react-query': ^5.69.0
+      react: ^18 || ^19
+    dependencies:
+      '@tanstack/query-persist-client-core': 5.69.0
+      '@tanstack/react-query': 5.68.0(react@18.3.1)
+      react: 18.3.1
     dev: false
 
   /@tanstack/react-query@5.68.0(react@18.3.1):

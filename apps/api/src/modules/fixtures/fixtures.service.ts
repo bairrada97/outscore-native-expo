@@ -180,16 +180,6 @@ const migrateFixturesIfNeeded = async (date: string): Promise<void> => {
 
   const fixturesData = JSON.parse(cachedFixtures) as Fixture[];
 
-  // Check if these fixtures are already in Supabase
-  const { data: existingFixtures } = await db
-    .from(FIXTURES_TABLE)
-    .select('id')
-    .eq('date', date);
-
-  if (existingFixtures && existingFixtures.length > 0) {
-    return;
-  }
-
   // Transform fixtures for Supabase storage
   const fixturesForDb = fixturesData.map(fixture => ({
     id: fixture.fixture.id,
@@ -198,14 +188,20 @@ const migrateFixturesIfNeeded = async (date: string): Promise<void> => {
     raw_data: fixture,
   }));
 
-  // Insert into Supabase
+  // Insert into Supabase with upsert to handle duplicates
   const { error } = await db
     .from(FIXTURES_TABLE)
-    .insert(fixturesForDb);
+    .upsert(fixturesForDb, {
+      onConflict: 'id',
+      ignoreDuplicates: false, // Update existing records
+    });
 
   if (error) {
+    console.error('❌ Error migrating fixtures to Supabase:', error);
     throw error;
   }
+
+  console.log(`✅ Successfully migrated ${fixturesForDb.length} fixtures from Redis to Supabase`);
 
   // Remove from Redis after successful migration
   await redis.del(cacheKey);
@@ -256,18 +252,6 @@ const getLiveFixtures = async (timezone: string): Promise<FormattedFixturesRespo
 const storeFixturesInSupabase = async (fixtures: Fixture[], date: string): Promise<void> => {
   console.log('💾 Storing past fixtures in Supabase...');
   
-  // Check for existing fixtures first
-  console.log('🔍 Checking for existing fixtures in Supabase...');
-  const { data: existingFixtures } = await db
-    .from(FIXTURES_TABLE)
-    .select('id')
-    .eq('date', date);
-
-  if (existingFixtures && existingFixtures.length > 0) {
-    console.log(`⏩ Skipping insert - ${existingFixtures.length} fixtures already exist for this date`);
-    return;
-  }
-
   // Transform fixtures for Supabase storage
   const fixturesForDb = fixtures.map(fixture => ({
     id: fixture.fixture.id,
@@ -311,9 +295,16 @@ const storeFixturesInSupabase = async (fixtures: Fixture[], date: string): Promi
   }));
   
   try {
-    const { data, error } = await db.from(FIXTURES_TABLE).insert(fixturesForDb);
+    // Use upsert operation instead of insert to handle duplicates gracefully
+    const { data, error } = await db
+      .from(FIXTURES_TABLE)
+      .upsert(fixturesForDb, { 
+        onConflict: 'id',
+        ignoreDuplicates: false, // Update the record if it already exists
+      });
+      
     if (error) {
-      console.error('❌ Error inserting fixtures into Supabase:', error);
+      console.error('❌ Error upserting fixtures into Supabase:', error);
       throw error;
     }
     console.log(`✅ Successfully stored ${fixturesForDb.length} fixtures in Supabase`);

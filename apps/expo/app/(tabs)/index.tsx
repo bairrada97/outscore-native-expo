@@ -1,9 +1,8 @@
-
 import {Dimensions, useWindowDimensions, View } from 'react-native'
 
 import { ReactNode, useEffect, useState } from 'react'
 import { TabView, SceneMap, TabBarProps, Route, TabBar } from 'react-native-tab-view';
-import { addDays, format, subDays } from 'date-fns'
+import { format } from 'date-fns'
 import { useGlobalSearchParams, useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { isWeb } from '@gluestack-ui/nativewind-utils/IsWeb';
@@ -12,7 +11,8 @@ import SvgB021 from '@/components/ui/SvgIcons/B021';
 import { CalendarBarButton } from '@/components/CalendarBarButton/CalendarBarButton';
 import SvgB022 from '@/components/ui/SvgIcons/B022';
 import { cn } from '@/utils/misc';
-
+import FixturesHomeScreen from '@/components/FixturesHomeScreen/FixturesHomeScreen';
+import { getDateRange, getInitialTabIndex } from '@/utils/date-utils';
 
 export const CalendarBarButtonScreen = () => {
 	const screenWidth = Dimensions.get('screen').width
@@ -44,16 +44,13 @@ export default function HomeScreen() {
 	const isLive = date === 'live'
 	const currentDate = isLive ? 'live' : date ? new Date(date as string) : todayDate;
 	
-	const dates = [
-		subDays(todayDate, 2),  
-		subDays(todayDate, 1),
-		todayDate, 
-		addDays(todayDate, 1),
-		addDays(todayDate, 2),
-	  ]
+	// Use the utility function to get the date range
+	const dates = getDateRange(todayDate);
 
-	const initialIndex = !isLive ? dates.findIndex(date => format(date, 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd')) : 5
-	const [index, setIndex] = useState(initialIndex >= 0 ? initialIndex : 0);
+	// Use the utility function to get the initial tab index
+	const initialIndex = getInitialTabIndex(currentDate, todayDate);
+	const [index, setIndex] = useState(initialIndex);
+	
 	const tabs = [
 		...dates.map((date, index) => ({
 		  key: `tab-${index}`,
@@ -67,18 +64,24 @@ export default function HomeScreen() {
 		  weekDay: null,
 		  date: null
 		}
-	  ];
+	];
+	
 	const [routes] = useState(tabs)
 
 	const renderScene = SceneMap(
-		routes.reduce<Record<string, ( ) => ReactNode>>((scenes, route) => {
-			scenes[route.key] = () =>( 
-				<View><Text>{route.title}</Text></View>
-			)
+		routes.reduce<Record<string, () => ReactNode>>((scenes, route) => {
+			scenes[route.key] = () => {
+				if (route.key === 'tab-live') {
+					return <FixturesHomeScreen day="live" />
+				} else {
+					// Format date to 'yyyy-MM-dd' for the fixture query
+					const formattedDate = route.date ? format(route.date, 'yyyy-MM-dd') : ''
+					return <FixturesHomeScreen day={formattedDate} />
+				}
+			}
 			return scenes;
 		}, {})
 	);
-	
 
   return (
 	<View style={{ height: "100%", flexDirection: 'row' }}>

@@ -5,7 +5,8 @@
     "paths": {
       "@/*": [
         "./*"
-      ]
+      ],
+      "@outscore/shared-types": ["../../packages/shared-types/src"]
     }
   },
   "include": [

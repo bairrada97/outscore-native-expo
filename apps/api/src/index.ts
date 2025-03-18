@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { fixturesRoutes } from './modules/fixtures/fixtures.routes';
 import { timezonesRoutes } from './modules/timezones/timezones.routes';
 
@@ -13,6 +14,15 @@ const sdk = new NodeSDK({
 sdk.start();
 
 const app = new Hono();
+
+// Add CORS middleware
+app.use('*', cors({
+  origin: '*', // Allow all origins for development - restrict this in production
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+  exposeHeaders: ['Content-Length'],
+  maxAge: 600,
+})); 
 
 // Health check
 app.get('/health', (c) => c.json({ status: 'ok' }));
