@@ -26,27 +26,153 @@ let lastR2UpdateTimestamp = 0; // Separate tracking for R2 updates
 let lastAccessTime = 0;
 const MAX_IDLE_TIME = 60000; // 60 seconds max idle time
 
+// Store the current date to detect day changes
+let currentDateString = format(new Date(), 'yyyy-MM-dd');
+
+// Store environment reference for migrations
+let envRef: any = null;
+
 // Force refresh data from API every N seconds for today's data
 const FORCE_REFRESH_INTERVAL = 15; // 15 seconds forced refresh
 
-// Check if we need to reset our timers due to worker being restarted or idle
-function checkTimestampReset() {
-  const now = Date.now();
-  
-  // If this is first access or we've been idle for too long, reset timestamps
-  if (lastAccessTime === 0 || (now - lastAccessTime > MAX_IDLE_TIME)) {
-    if (lastAccessTime > 0) {
-      console.log(`⚠️ Worker was idle for ${(now - lastAccessTime) / 1000}s, resetting timestamps`);
+// Store environment reference
+function storeEnvReference(env: any) {
+  if (env && env.MATCH_DATA) {
+    envRef = env;
+  }
+}
+
+// Handle date transitions
+const handleDateTransition = async (oldDate: string, newDate: string) => {
+  try {
+    console.log(`🔄 Handling date transition from ${oldDate} to ${newDate}`);
+    
+    if (!envRef) {
+      console.error('❌ Environment reference not available for migration');
+      return;
     }
     
-    // Reset update timestamps to force a refresh on next access
+    // Calculate yesterday and tomorrow
+    const oldDateObj = new Date(oldDate);
+    const newDateObj = new Date(newDate);
+    
+    const yesterdayObj = new Date(newDateObj);
+    yesterdayObj.setUTCDate(newDateObj.getUTCDate() - 1);
+    const yesterdayStr = format(yesterdayObj, 'yyyy-MM-dd');
+    
+    const tomorrowObj = new Date(newDateObj);
+    tomorrowObj.setUTCDate(newDateObj.getUTCDate() + 1);
+    const tomorrowStr = format(tomorrowObj, 'yyyy-MM-dd');
+    
+    console.log(`📆 Date reference points: yesterday=${yesterdayStr}, today=${newDate}, tomorrow=${tomorrowStr}`);
+    
+    // Perform necessary migrations based on the date change
+    // 1. Move previous day's data to historical if it exists
+    const oldDataExists = await checkIfDataExists(oldDate, envRef);
+    if (oldDataExists) {
+      console.log(`📦 Moving previous day (${oldDate}) to historical folder`);
+      await migrateFixturesToHistorical(oldDate, envRef);
+    }
+    
+    // 2. Check if tomorrow's data exists and move it to today
+    const tomorrowDataExists = await checkIfDataExists(tomorrowStr, envRef, 'future');
+    if (tomorrowDataExists) {
+      console.log(`📦 Moving future data (${tomorrowStr}) to today folder`);
+      await migrateFixturesToToday(tomorrowStr, envRef);
+    }
+    
+    console.log('✅ Date transition handling completed');
+  } catch (err) {
+    console.error('❌ Error during date transition:', err instanceof Error ? err.message : String(err));
+  }
+};
+
+// Check if data exists in a specific folder
+const checkIfDataExists = async (date: string, env: any, folder: 'today' | 'historical' | 'future' = 'today'): Promise<boolean> => {
+  try {
+    const key = `${folder}/${date}.json`;
+    const data = await env.FIXTURES_BUCKET.get(key);
+    return data !== null;
+  } catch (err) {
+    console.error(`❌ Error checking if data exists for ${date} in ${folder}:`, 
+      err instanceof Error ? err.message : String(err));
+    return false;
+  }
+};
+
+// Migrate fixtures from today to historical
+const migrateFixturesToHistorical = async (date: string, env: any): Promise<void> => {
+  try {
+    const sourceKey = `today/${date}.json`;
+    const targetKey = `historical/${date}.json`;
+    
+    // Get data from source
+    const data = await env.FIXTURES_BUCKET.get(sourceKey);
+    if (!data) {
+      console.log(`⚠️ No data found for ${sourceKey}, skipping migration`);
+      return;
+    }
+    
+    // Put data to target
+    await env.FIXTURES_BUCKET.put(targetKey, data);
+    console.log(`✅ Migrated ${sourceKey} to ${targetKey}`);
+    
+    // Delete source
+    await env.FIXTURES_BUCKET.delete(sourceKey);
+    console.log(`🗑️ Deleted ${sourceKey} after migration`);
+  } catch (err) {
+    console.error('❌ Error migrating fixtures to historical:', 
+      err instanceof Error ? err.message : String(err));
+  }
+};
+
+// Migrate fixtures from future to today
+const migrateFixturesToToday = async (date: string, env: any): Promise<void> => {
+  try {
+    const sourceKey = `future/${date}.json`;
+    const targetKey = `today/${date}.json`;
+    
+    // Get data from source
+    const data = await env.FIXTURES_BUCKET.get(sourceKey);
+    if (!data) {
+      console.log(`⚠️ No data found for ${sourceKey}, skipping migration`);
+      return;
+    }
+    
+    // Put data to target
+    await env.FIXTURES_BUCKET.put(targetKey, data);
+    console.log(`✅ Migrated ${sourceKey} to ${targetKey}`);
+    
+    // Delete source
+    await env.FIXTURES_BUCKET.delete(sourceKey);
+    console.log(`🗑️ Deleted ${sourceKey} after migration`);
+  } catch (err) {
+    console.error('❌ Error migrating fixtures to today:', 
+      err instanceof Error ? err.message : String(err));
+  }
+};
+
+// Function to check if we've crossed to a new day
+const checkTimestampReset = () => {
+  const now = new Date();
+  const nowDateString = format(now, 'yyyy-MM-dd');
+  
+  // Check if we've crossed to a new day
+  if (nowDateString !== currentDateString) {
+    console.log(`📆 Date transition detected: ${currentDateString} → ${nowDateString}`);
+    
+    // Update the current date
+    const previousDate = currentDateString;
+    currentDateString = nowDateString;
+    
+    // Force data refresh due to date change
     lastTodayUpdateTimestamp = 0;
     lastR2UpdateTimestamp = 0;
+    
+    // Handle the date transition immediately (but don't block)
+    handleDateTransition(previousDate, nowDateString);
   }
-  
-  // Update last access time
-  lastAccessTime = now;
-}
+};
 
 // Check if a date is today in UTC
 function isDateToday(dateStr: string): boolean {
@@ -66,6 +192,9 @@ const cacheFixtures = async (
 ): Promise<void> => {
   // Check and potentially reset timestamps
   checkTimestampReset();
+  
+  // Store environment reference for migrations
+  storeEnvReference(env);
   
   console.log(`📝 Starting cache operation for ${live ? 'live matches' : 'all matches'} on ${date}`);
   const startTime = performance.now();
@@ -195,6 +324,9 @@ const getFixturesFromStorage = async (
 ): Promise<{ fixtures: Fixture[] | null; source: string; forceRefresh?: boolean }> => {
   // Check and potentially reset timestamps
   checkTimestampReset();
+  
+  // Store environment reference for migrations
+  storeEnvReference(env);
   
   console.log(`🔍 Retrieving fixtures for ${date}${live ? ' (live)' : ''}`);
   const startTime = performance.now();

@@ -9,7 +9,7 @@ import {
   FixtureStatusShort
 } from '@outscore/shared-types';
 
-export const TODAY_UPDATE_INTERVAL = 20; // 20 seconds for today/live (increased from 15)
+export const TODAY_UPDATE_INTERVAL = 15; // 15 seconds for today/live
 
 export const FUTURE_TTL = (date: string, fixtures: Fixture[]): number => {
   // Find the earliest and latest match timestamps for the day

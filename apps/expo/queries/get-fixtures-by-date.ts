@@ -63,12 +63,7 @@ export const getFixturesByDate = async (args: any) => {
 		}
 	  );
 	  
-	  // Log all response headers
-	  console.log('Response headers:');
-	  response.headers.forEach((value, key) => {
-		console.log(`${key}: ${value}`);
-	  });
-	  
+
 	  if (!response.ok) {
 		throw new Error(`API request failed with status ${response.status}`);
 	  }
