@@ -41,13 +41,14 @@ export const getFootballApiFixtures = async (
       throw new Error(`API request failed: ${response.statusText} - ${errorText}`);
     }
 
-    const data: FixturesResponse = await response.json();
+    const data = await response.json();
 
-    if (data.errors && data.errors.length > 0) {
+    // Make sure the data conforms to the expected type
+    if (data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
       throw new Error(`API returned errors: ${JSON.stringify(data.errors)}`);
     }
 
-    return data;
+    return data as FixturesResponse;
   } catch (error) {
     console.error('Error fetching fixtures:', error);
     throw error;
