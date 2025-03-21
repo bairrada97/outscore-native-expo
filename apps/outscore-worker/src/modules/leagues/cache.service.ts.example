@@ -1,0 +1,101 @@
+import { format } from 'date-fns';
+import { createR2CacheProvider } from '../cache';
+import { CacheConfig, CacheStrategy, StrategyResult } from '../cache/types';
+import { TTL } from '../cache/provider.interface';
+
+/**
+ * Very simple leagues cache strategy that just uses a fixed long TTL
+ * No parameters needed beyond the standard ones
+ */
+export const getLeaguesCacheStrategy = (): StrategyResult => {
+  // Leagues data doesn't change often, use long-term caching with a week TTL
+  return { 
+    strategy: CacheStrategy.LONG_TERM, 
+    ttl: TTL.LONG * 7 // 1 week (7 days)
+  };
+};
+
+/**
+ * Gets a cache key for league data
+ */
+export const getLeaguesCacheKey = (date: string): string => {
+  return `leagues/leagues-${date}.json`;
+};
+
+// Store leagues in cache - notice how much simpler this is
+export const cacheLeagues = async (
+  date: string, 
+  leagues: any[], 
+  env: any
+): Promise<boolean> => {
+  // Create provider directly
+  const provider = createR2CacheProvider(env.FOOTBALL_CACHE);
+  
+  // Get strategy
+  const { strategy, ttl } = getLeaguesCacheStrategy();
+  
+  console.log(`📝 Starting cache operation for leagues on ${date}`);
+  
+  try {
+    // Create cache key
+    const key = getLeaguesCacheKey(date);
+    
+    // Prepare metadata
+    const metadata: Record<string, string> = {
+      date,
+      strategy
+    };
+    
+    // Cache with config
+    const config: CacheConfig = {
+      ttl,
+      metadata
+    };
+    
+    const success = await provider.set(key, leagues, config);
+    
+    if (success) {
+      console.log(`✅ Successfully cached ${leagues.length} leagues with TTL ${ttl}s`);
+    } else {
+      console.error(`❌ Failed to cache leagues`);
+    }
+    
+    return success;
+  } catch (error) {
+    console.error(`❌ Error during leagues caching:`, error);
+    throw error;
+  }
+};
+
+// Get leagues from storage
+export const getLeaguesFromStorage = async (
+  date: string, 
+  env: any
+): Promise<{ leagues: any[] | null; source: string }> => {
+  // Create provider directly
+  const provider = createR2CacheProvider(env.FOOTBALL_CACHE);
+  
+  console.log(`🔍 Retrieving leagues for ${date}`);
+  
+  try {
+    // Create cache key
+    const key = getLeaguesCacheKey(date);
+    
+    // Get from cache
+    const result = await provider.get(key);
+    
+    if (result.data) {
+      console.log(`✅ Successfully retrieved leagues from cache`);
+      return { 
+        leagues: result.data, 
+        source: 'R2'
+      };
+    }
+    
+    console.log(`❓ No cached leagues found for ${date}`);
+    return { leagues: null, source: 'None' };
+  } catch (error) {
+    console.error(`❌ Error retrieving leagues:`, error);
+    return { leagues: null, source: 'Error' };
+  }
+}; 

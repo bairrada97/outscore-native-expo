@@ -34,15 +34,6 @@ export interface CacheMeta {
 }
 
 /**
- * Cache storage locations or prefixes
- */
-export enum CacheLocation {
-  TODAY = 'today',
-  HISTORICAL = 'historical',
-  FUTURE = 'future'
-}
-
-/**
  * Cache strategies determine how data is cached and retrieved
  */
 export enum CacheStrategy {
@@ -61,6 +52,27 @@ export enum CacheStrategy {
    */
   LONG_TERM = 'long_term'
 }
+
+/**
+ * Strategy result containing both the strategy and TTL
+ */
+export interface StrategyResult {
+  /**
+   * The cache strategy to use
+   */
+  strategy: CacheStrategy;
+  
+  /**
+   * Time-to-live in seconds
+   */
+  ttl: number;
+}
+
+/**
+ * Generic cache strategy function
+ * Each endpoint can implement their own version with relevant parameters
+ */
+export type CacheStrategyFn = (...args: any[]) => StrategyResult;
 
 /**
  * Response from cache operations that includes source information

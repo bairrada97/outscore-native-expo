@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
-import { createR2CacheProvider, createCacheService } from '../cache';
+import { createR2CacheProvider } from '../cache';
+import { handleFixturesDateTransition } from './cache.service';
 
 // Get UTC date information for the current request
 export const getUtcDateInfo = (date: string): {
@@ -45,9 +46,8 @@ export const handleDateTransition = async (oldDate: string, newDate: string, env
       return;
     }
     
-    // Create providers
+    // Create provider directly
     const r2Provider = createR2CacheProvider(env.FOOTBALL_CACHE);
-    const cacheService = createCacheService(r2Provider);
     
     // Calculate yesterday and tomorrow
     const yesterdayObj = new Date(newDate);
@@ -60,8 +60,8 @@ export const handleDateTransition = async (oldDate: string, newDate: string, env
     
     console.log(`📆 Date reference points: yesterday=${yesterdayStr}, today=${newDate}, tomorrow=${tomorrowStr}`);
     
-    // Use the cache service to check for existing data and perform migrations
-    await cacheService.handleDateTransition(oldDate, newDate, env);
+    // Use the fixtures-specific date transition handler directly
+    await handleFixturesDateTransition(oldDate, newDate, env, r2Provider);
     
     console.log('✅ Date transition handling completed');
   } catch (err) {
