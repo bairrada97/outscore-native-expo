@@ -42,6 +42,66 @@ function storeEnvReference(env: any) {
   }
 }
 
+// Check for date transitions by comparing current UTC date with data in the "today" folder
+const checkBucketDateTransition = async (env: any): Promise<boolean> => {
+  try {
+    if (!env || !env.MATCH_DATA) {
+      console.error('❌ Environment reference not available for bucket date check');
+      return false;
+    }
+
+    // Get current UTC date
+    const now = new Date();
+    const currentUtcDate = format(now, 'yyyy-MM-dd');
+    console.log(`🔍 Checking bucket date transition. Current UTC date: ${currentUtcDate}`);
+
+    // Try to list objects in the "today" folder
+    try {
+      const objects = await env.MATCH_DATA.list({ prefix: 'today/' });
+      
+      // Extract date from filenames (e.g., 'today/fixtures-2023-04-20.json')
+      let bucketStoredDate = null;
+      if (objects && objects.objects && objects.objects.length > 0) {
+        for (const object of objects.objects) {
+          const match = object.key.match(/today\/fixtures-(\d{4}-\d{2}-\d{2})(?:-live)?\.json/);
+          if (match && match[1]) {
+            bucketStoredDate = match[1];
+            break;
+          }
+        }
+      }
+      
+      // If we found a stored date and it doesn't match current date, trigger migration
+      if (bucketStoredDate && bucketStoredDate !== currentUtcDate) {
+        console.log(`📆 Date transition detected in bucket: ${bucketStoredDate} → ${currentUtcDate}`);
+        
+        // Update in-memory tracking to match reality
+        const previousDate = bucketStoredDate;
+        currentDateString = currentUtcDate;
+        
+        // Reset timestamps to force data refresh
+        lastTodayUpdateTimestamp = 0;
+        lastR2UpdateTimestamp = 0;
+        
+        // Handle the date transition
+        await handleDateTransition(previousDate, currentUtcDate);
+        return true;
+      } else if (bucketStoredDate) {
+        console.log(`✅ Bucket date check: Today's data is current (${bucketStoredDate})`);
+      } else {
+        console.log(`ℹ️ Bucket date check: No data found in today's folder`);
+      }
+    } catch (err) {
+      console.error('❌ Error listing objects in bucket:', err instanceof Error ? err.message : String(err));
+    }
+    
+    return false;
+  } catch (err) {
+    console.error('❌ Error during bucket date transition check:', err instanceof Error ? err.message : String(err));
+    return false;
+  }
+};
+
 // Handle date transitions
 const handleDateTransition = async (oldDate: string, newDate: string) => {
   try {
@@ -196,6 +256,9 @@ const cacheFixtures = async (
   // Store environment reference for migrations
   storeEnvReference(env);
   
+  // Check for date transitions based on bucket data
+  await checkBucketDateTransition(env);
+  
   console.log(`📝 Starting cache operation for ${live ? 'live matches' : 'all matches'} on ${date}`);
   const startTime = performance.now();
   
@@ -328,6 +391,9 @@ const getFixturesFromStorage = async (
   // Store environment reference for migrations
   storeEnvReference(env);
   
+  // Check for date transitions based on bucket data
+  await checkBucketDateTransition(env);
+  
   console.log(`🔍 Retrieving fixtures for ${date}${live ? ' (live)' : ''}`);
   const startTime = performance.now();
   
@@ -402,55 +468,15 @@ const getFixturesFromStorage = async (
       const data = await r2Object.text();
       const fixtures = JSON.parse(data);
       const duration = (performance.now() - startTime).toFixed(2);
-      console.log(`✨ Retrieved ${fixtures.length} fixtures from R2 in ${duration}ms`);
-      
-      // For today's data and live data, check when R2 was last modified
-      let isR2Stale = false;
-      let r2AgeSeconds = 0;
-      let reason = '';
-      
-      if (r2Object.httpMetadata?.lastModified) {
-        const r2Age = Date.now() - r2Object.httpMetadata.lastModified.getTime();
-        r2AgeSeconds = Math.floor(r2Age / 1000);
-        console.log(`ℹ️ R2 data age: ${r2AgeSeconds} seconds`);
-        
-        // For today's data, check if R2 data is "stale" but still usable
-        if (isTodayOrLive) {
-          // Data is stale if it's older than our R2 refresh interval,
-          // but we'll still use it unless it's critically stale
-          isR2Stale = r2AgeSeconds > FORCE_REFRESH_INTERVAL;
-          
-          if (isR2Stale) {
-            console.log(`ℹ️ R2 data is stale (${r2AgeSeconds}s > ${FORCE_REFRESH_INTERVAL}s)`);
-            reason = 'age';
-          }
-          
-          // Check if we've had a recent update from another instance 
-          const recentUpdate = lastTodayUpdateTimestamp > 0 && 
-                              (Date.now() - lastTodayUpdateTimestamp < TODAY_UPDATE_INTERVAL * 1000);
-          
-          // If R2 data is critically stale AND we haven't updated recently, force refresh from API
-          // Critical staleness is 3x our normal refresh interval
-          if (r2AgeSeconds > FORCE_REFRESH_INTERVAL * 3 && !recentUpdate) {
-            console.log(`⚠️ R2 data is critically stale (${r2AgeSeconds}s > ${FORCE_REFRESH_INTERVAL * 3}s) and no recent update detected`);
-            return { fixtures: null, source: 'None', forceRefresh: true };
-          }
-        }
-      }
-      
-      return { 
-        fixtures, 
-        source: 'R2',
-        forceRefresh: isR2Stale && isTodayOrLive // Only force refresh for stale today's data
-      };
+      console.log(`✅ Successfully retrieved ${fixtures.length} fixtures from R2 in ${duration}ms`);
+      return { fixtures, source: 'R2', forceRefresh };
     }
     
-    console.log('❌ No fixtures found in storage');
-    return { fixtures: null, source: 'None', forceRefresh: true };
+    return { fixtures: null, source: 'None', forceRefresh };
   } catch (error) {
     const duration = (performance.now() - startTime).toFixed(2);
-    console.error(`❌ Error retrieving from storage after ${duration}ms:`, error);
-    return { fixtures: null, source: 'Error' };
+    console.error(`❌ Error during retrieval after ${duration}ms:`, error);
+    return { fixtures: null, source: 'None', forceRefresh: true };
   }
 };
 

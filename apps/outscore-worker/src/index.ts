@@ -3,8 +3,8 @@ import { cors } from 'hono/cors';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { format } from 'date-fns';
-import { fixturesService } from './modules/fixtures/fixtures.service';
 import { isValidTimezone } from './modules/timezones';
+import { fixturesService } from './modules/fixtures/fixtures.service';
 
 interface Env {
   MATCH_DATA: R2Bucket;
