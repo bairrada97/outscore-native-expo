@@ -7,7 +7,7 @@ import { isValidTimezone } from './modules/timezones';
 import { fixturesService } from './modules/fixtures/fixtures.service';
 
 interface Env {
-  MATCH_DATA: R2Bucket;
+  FOOTBALL_CACHE: R2Bucket;
   FOOTBALL_API_URL: string;
   RAPIDAPI_KEY: string;
 }

@@ -54,7 +54,7 @@ export const checkBucketDateTransition = async (env: any, lastTodayUpdateTimesta
   transitionDetected: boolean;
 }> => {
   try {
-    if (!env || !env.MATCH_DATA) {
+    if (!env || !env.FOOTBALL_CACHE) {
       console.error('❌ Environment reference not available for bucket date check');
       return { lastTodayUpdateTimestamp, lastR2UpdateTimestamp, currentDateString, transitionDetected: false };
     }
@@ -66,7 +66,7 @@ export const checkBucketDateTransition = async (env: any, lastTodayUpdateTimesta
 
     // Try to list objects in the "today" folder
     try {
-      const objects = await env.MATCH_DATA.list({ prefix: 'today/' });
+      const objects = await env.FOOTBALL_CACHE.list({ prefix: 'today/' });
       
       // Extract date from filenames (e.g., 'today/fixtures-2023-04-20.json')
       let bucketStoredDate = null;

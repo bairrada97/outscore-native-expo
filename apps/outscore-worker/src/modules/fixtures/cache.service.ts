@@ -191,7 +191,7 @@ export const getFixturesFromStorage = async (
     const r2Key = getR2Key(date, live);
     console.log(`🔍 Checking R2 with key: ${r2Key}`);
     
-    const r2Object = await env.MATCH_DATA.get(r2Key);
+    const r2Object = await env.FOOTBALL_CACHE.get(r2Key);
     if (r2Object) {
       const data = await r2Object.text();
       const fixtures = JSON.parse(data);

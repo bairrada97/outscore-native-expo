@@ -5,7 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 # R2 bucket for storing match data
 [[r2_buckets]]
-binding = "MATCH_DATA"
+binding = "FOOTBALL_CACHE"
 bucket_name = "outscore-match-data"
 preview_bucket_name = "outscore-match-data-dev"
 

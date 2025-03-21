@@ -14,7 +14,7 @@ export const getR2Key = (date: string, live?: boolean): string => {
 export const checkIfDataExists = async (date: string, env: any, folder: 'today' | 'historical' | 'future' = 'today'): Promise<boolean> => {
   try {
     const key = `${folder}/fixtures-${date}.json`;
-    const data = await env.MATCH_DATA.get(key);
+    const data = await env.FOOTBALL_CACHE.get(key);
     return data !== null;
   } catch (err) {
     console.error(`❌ Error checking if data exists for ${date} in ${folder}:`, 
@@ -30,18 +30,18 @@ export const migrateFixturesToHistorical = async (date: string, env: any): Promi
     const targetKey = `historical/fixtures-${date}.json`;
     
     // Get data from source
-    const data = await env.MATCH_DATA.get(sourceKey);
+    const data = await env.FOOTBALL_CACHE.get(sourceKey);
     if (!data) {
       console.log(`⚠️ No data found for ${sourceKey}, skipping migration`);
       return;
     }
     
     // Put data to target
-    await env.MATCH_DATA.put(targetKey, data);
+    await env.FOOTBALL_CACHE.put(targetKey, data);
     console.log(`✅ Migrated ${sourceKey} to ${targetKey}`);
     
     // Delete source
-    await env.MATCH_DATA.delete(sourceKey);
+    await env.FOOTBALL_CACHE.delete(sourceKey);
     console.log(`🗑️ Deleted ${sourceKey} after migration`);
   } catch (err) {
     console.error('❌ Error migrating fixtures to historical:', 
@@ -56,18 +56,18 @@ export const migrateFixturesToToday = async (date: string, env: any): Promise<vo
     const targetKey = `today/fixtures-${date}.json`;
     
     // Get data from source
-    const data = await env.MATCH_DATA.get(sourceKey);
+    const data = await env.FOOTBALL_CACHE.get(sourceKey);
     if (!data) {
       console.log(`⚠️ No data found for ${sourceKey}, skipping migration`);
       return;
     }
     
     // Put data to target
-    await env.MATCH_DATA.put(targetKey, data);
+    await env.FOOTBALL_CACHE.put(targetKey, data);
     console.log(`✅ Migrated ${sourceKey} to ${targetKey}`);
     
     // Delete source
-    await env.MATCH_DATA.delete(sourceKey);
+    await env.FOOTBALL_CACHE.delete(sourceKey);
     console.log(`🗑️ Deleted ${sourceKey} after migration`);
   } catch (err) {
     console.error('❌ Error migrating fixtures to today:', 
@@ -108,7 +108,7 @@ export const cacheFixturesInR2 = async (
       }
     };
     
-    await env.MATCH_DATA.put(r2Key, jsonData, { httpMetadata: metadata });
+    await env.FOOTBALL_CACHE.put(r2Key, jsonData, { httpMetadata: metadata });
     console.log(`✅ Successfully stored in R2 at ${new Date().toISOString()}`);
     return true;
   } catch (r2Error) {
