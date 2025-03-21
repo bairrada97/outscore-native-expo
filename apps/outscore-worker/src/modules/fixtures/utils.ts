@@ -4,7 +4,6 @@ import {
   Fixture, 
   FormattedFixturesResponse,
   FormattedCountry,
-  FormattedLeague,
   FormattedMatch,
   FixtureStatusShort
 } from '@outscore/shared-types';

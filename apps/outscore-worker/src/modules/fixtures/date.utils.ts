@@ -61,7 +61,12 @@ export const handleDateTransition = async (oldDate: string, newDate: string, env
     console.log(`📆 Date reference points: yesterday=${yesterdayStr}, today=${newDate}, tomorrow=${tomorrowStr}`);
     
     // Use the fixtures-specific date transition handler directly
-    await handleFixturesDateTransition(oldDate, newDate, env, r2Provider);
+    await handleFixturesDateTransition({
+      oldDate,
+      newDate,
+      env,
+      provider: r2Provider
+    });
     
     console.log('✅ Date transition handling completed');
   } catch (err) {

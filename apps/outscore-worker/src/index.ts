@@ -4,6 +4,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { format } from 'date-fns';
 import { isValidTimezone, fixturesService, createR2CacheProvider } from './modules';
+import { getUtcDateInfo } from './modules/fixtures/date.utils';
 
 interface Env {
   FOOTBALL_CACHE: R2Bucket;
@@ -60,11 +61,16 @@ async function refreshTodayFixtures(env: any) {
   try {
     console.log('🔄 BACKGROUND: Automatically refreshing today\'s fixtures data');
     
-    // Get today's date in UTC
-    const today = format(new Date(), 'yyyy-MM-dd');
+    // Get current UTC date
+    const now = new Date();
+    const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const today = format(utcNow, 'yyyy-MM-dd');
+    
+    // Get date info
+    const dateInfo = getUtcDateInfo(today);
     
     // Force refresh from API
-    console.log(`🌐 BACKGROUND: Fetching fresh fixtures for ${today} from API`);
+    console.log(`🌐 BACKGROUND: Fetching fresh fixtures for ${dateInfo.utcToday} from API`);
     
     // Create a mock ExecutionContext
     const mockCtx = {
@@ -78,7 +84,7 @@ async function refreshTodayFixtures(env: any) {
     
     // Fetch fresh data for today
     await fixturesService.getFixtures({
-      date: today,
+      date: dateInfo.utcToday,
       timezone: 'UTC',
       live: undefined,
       env,
@@ -118,28 +124,15 @@ app.get('/fixtures', zValidator('query', dateSchema), async (c) => {
   const requestStartTime = performance.now();
   
   try {
-    // Create UTC date objects for consistency
+    // Get current UTC date as default
     const now = new Date();
     const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const utcToday = format(utcNow, 'yyyy-MM-dd');
+    const defaultDate = format(utcNow, 'yyyy-MM-dd');
+    const queryDate = date || defaultDate;
     
-    // Get today if date is not provided
-    const queryDate = date || format(utcNow, 'yyyy-MM-dd');
-    const isTodayData = queryDate === utcToday;
-    
-    // Check if date is in 3-day window (yesterday, today, tomorrow)
-    const utcYesterday = new Date(utcNow);
-    utcYesterday.setDate(utcNow.getDate() - 1);
-    const yesterdayStr = format(utcYesterday, 'yyyy-MM-dd');
-    
-    const utcTomorrow = new Date(utcNow);
-    utcTomorrow.setDate(utcNow.getDate() + 1);
-    const tomorrowStr = format(utcTomorrow, 'yyyy-MM-dd');
-    
-    const isDateInThreeDayWindow = 
-      queryDate === yesterdayStr || 
-      queryDate === utcToday || 
-      queryDate === tomorrowStr;
+    // Use the getUtcDateInfo function to get date information
+    const dateInfo = getUtcDateInfo(queryDate);
+    const { isDateInThreeDayWindow, isTodayData, utcToday } = dateInfo;
     
     console.log(`📅 Handling request for date=${queryDate}, timezone=${timezone}, live=${live}, today=${utcToday}`);
     console.log(`🔍 Date is ${isDateInThreeDayWindow ? 'within' : 'outside'} the 3-day window`);
@@ -158,7 +151,7 @@ app.get('/fixtures', zValidator('query', dateSchema), async (c) => {
     
     // Set standard headers
     c.header('X-Response-Time', `${responseTime}ms`);
-    c.header('X-UTC-Today', utcToday);
+    c.header('X-UTC-Today', dateInfo.utcToday);
     c.header('X-Requested-Date', queryDate);
     c.header('X-In-Three-Day-Window', isDateInThreeDayWindow ? 'true' : 'false');
     c.header('X-Is-Today', isTodayData ? 'true' : 'false');

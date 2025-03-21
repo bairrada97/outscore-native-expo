@@ -1,11 +1,5 @@
 import { CacheConfig, CacheMeta } from './types';
 
-// Cache TTL presets that can be used by strategies
-export const TTL = {
-  SHORT: 15, // 15 seconds
-  STANDARD: 3600, // 1 hour
-  LONG: 86400 // 1 day
-};
 
 /**
  * CacheProvider defines the contract for all cache implementations

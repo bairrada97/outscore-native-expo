@@ -5,6 +5,15 @@ import type { R2Bucket } from '@cloudflare/workers-types';
 /**
  * Creates an R2 cache provider that implements the CacheProvider interface
  */
+
+// Cache TTL presets that can be used by strategies
+export const TTL = {
+  SHORT: 15, // 15 seconds
+  STANDARD: 3600, // 1 hour
+  LONG: 86400 // 1 day
+};
+
+
 export const createR2CacheProvider = <T = any>(r2Bucket: R2Bucket): CacheProvider<T> => {
   /**
    * Store data in R2

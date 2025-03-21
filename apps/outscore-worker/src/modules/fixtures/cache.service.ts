@@ -1,8 +1,8 @@
 import { format } from 'date-fns';
 import { Fixture } from '@outscore/shared-types';
-import { createR2CacheProvider } from '../cache';
+import { createR2CacheProvider, TTL } from '../cache';
 import { CacheConfig, CacheResult, CacheStrategy, StrategyResult } from '../cache/types';
-import { CacheProvider, TTL } from '../cache/provider.interface';
+import { CacheProvider} from '../cache/provider.interface';
 
 // In-memory state for tracking updates (fixtures-specific)
 let lastUpdateTimestamp = 0;
@@ -18,11 +18,15 @@ export enum FixturesCacheLocation {
 /**
  * Gets the appropriate cache key for fixtures data
  */
-export const getFixturesCacheKey = (
-  prefix: FixturesCacheLocation,
-  date: string,
-  isLive?: boolean
-): string => {
+export const getFixturesCacheKey = ({
+  prefix,
+  date,
+  isLive = false
+}: {
+  prefix: FixturesCacheLocation;
+  date: string;
+  isLive?: boolean;
+}): string => {
   const tag = isLive ? '-live' : '';
   return `${prefix}/fixtures-${date}${tag}.json`;
 };
@@ -50,12 +54,17 @@ export const getFixturesCacheLocation = (date: string): FixturesCacheLocation =>
 /**
  * Handle fixtures data migrations when date changes
  */
-export const handleFixturesDateTransition = async <T>(
-  oldDate: string, 
-  newDate: string, 
-  env: any,
-  provider: CacheProvider<T>
-): Promise<void> => {
+export const handleFixturesDateTransition = async <T>({
+  oldDate,
+  newDate,
+  env,
+  provider
+}: {
+  oldDate: string;
+  newDate: string;
+  env: any;
+  provider: CacheProvider<T>;
+}): Promise<void> => {
   try {
     console.log(`🔄 Handling fixtures date transition from ${oldDate} to ${newDate}`);
     
@@ -71,22 +80,22 @@ export const handleFixturesDateTransition = async <T>(
     console.log(`📆 Date reference points: yesterday=${yesterdayStr}, today=${newDate}, tomorrow=${tomorrowStr}`);
     
     // Move previous day's data to historical if it exists
-    const oldFixturesKey = getFixturesCacheKey(FixturesCacheLocation.TODAY, oldDate);
+    const oldFixturesKey = getFixturesCacheKey({ prefix: FixturesCacheLocation.TODAY, date: oldDate });
     const oldExists = await provider.exists(oldFixturesKey);
     
     if (oldExists) {
       console.log(`📦 Moving previous day (${oldDate}) to historical folder`);
-      const newKey = getFixturesCacheKey(FixturesCacheLocation.HISTORICAL, oldDate);
+      const newKey = getFixturesCacheKey({ prefix: FixturesCacheLocation.HISTORICAL, date: oldDate });
       await provider.move(oldFixturesKey, newKey);
     }
     
     // Check if tomorrow's data exists and move it to today
-    const tomorrowFixturesKey = getFixturesCacheKey(FixturesCacheLocation.FUTURE, tomorrowStr);
+    const tomorrowFixturesKey = getFixturesCacheKey({ prefix: FixturesCacheLocation.FUTURE, date: tomorrowStr });
     const tomorrowExists = await provider.exists(tomorrowFixturesKey);
     
     if (tomorrowExists) {
       console.log(`📦 Moving future data (${tomorrowStr}) to today folder`);
-      const newTodayKey = getFixturesCacheKey(FixturesCacheLocation.TODAY, tomorrowStr);
+      const newTodayKey = getFixturesCacheKey({ prefix: FixturesCacheLocation.TODAY, date: tomorrowStr });
       await provider.move(tomorrowFixturesKey, newTodayKey);
     }
     
@@ -100,10 +109,13 @@ export const handleFixturesDateTransition = async <T>(
  * Fixture-specific cache strategy that decides caching behavior
  * based on date proximity and live status
  */
-export const getFixturesCacheStrategy = (
-  date: string,
-  isLive: boolean
-): StrategyResult => {
+export const getFixturesCacheStrategy = ({
+  date,
+  isLive
+}: {
+  date: string;
+  isLive: boolean;
+}): StrategyResult => {
   const now = new Date();
   const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const today = format(utcNow, 'yyyy-MM-dd');
@@ -140,33 +152,51 @@ export const getFixturesCacheStrategy = (
 /**
  * Check if the date has changed and handle transition if needed
  */
-export const checkDateTransition = async (
-  env: any,
-  provider: CacheProvider<any>
-): Promise<void> => {
+export const checkDateTransition = async ({
+  env,
+  provider
+}: {
+  env: any;
+  provider: CacheProvider<any>;
+}): Promise<void> => {
   const now = new Date();
   const nowDateString = format(now, 'yyyy-MM-dd');
   
   if (nowDateString !== currentDateString) {
-    console.log(`📆 Date transition detected: ${currentDateString} → ${nowDateString}`);
+    console.log(`📆 Date transition detected from ${currentDateString || 'initial'} to ${nowDateString}`);
+    // Trigger date transition handling
+    if (currentDateString) {
+      try {
+        // Use date transition handler from date utilities
+        await handleFixturesDateTransition({ oldDate: currentDateString, newDate: nowDateString, env, provider });
+      } catch (err) {
+        console.error('❌ Error during fixtures date transition:', err);
+      }
+    }
     
-    const previousDate = currentDateString;
+    // Update current date
     currentDateString = nowDateString;
-    lastUpdateTimestamp = 0;
-    
-    await handleFixturesDateTransition(previousDate, nowDateString, env, provider);
   }
 };
 
-// Store fixtures in cache
-export const cacheFixtures = async (
-  date: string, 
-  fixtures: Fixture[], 
-  env: any, 
-  ctx: any, 
-  live?: boolean,
+/**
+ * Cache fixtures for a specific date
+ */
+export const cacheFixtures = async ({
+  date,
+  fixtures,
+  env,
+  ctx,
+  live = false,
   forceUpdate = false
-): Promise<boolean> => {
+}: {
+  date: string;
+  fixtures: Fixture[];
+  env: any;
+  ctx: any;
+  live?: boolean;
+  forceUpdate?: boolean;
+}): Promise<boolean> => {
   // Create the cache provider
   const provider = createR2CacheProvider(env.FOOTBALL_CACHE);
   
@@ -174,20 +204,20 @@ export const cacheFixtures = async (
   const isLive = !!live;
   
   // Check for date transition
-  await checkDateTransition(env, provider);
+  await checkDateTransition({ env, provider });
   
   // Get the appropriate cache location prefix for this date
   const cacheLocation = getFixturesCacheLocation(date);
   
   // Get strategy and TTL
-  const { strategy, ttl } = getFixturesCacheStrategy(date, isLive);
+  const { strategy, ttl } = getFixturesCacheStrategy({ date, isLive });
   
   const startTime = performance.now();
   console.log(`📝 Starting fixtures cache operation for ${isLive ? 'live ' : ''}matches on ${date}`);
   
   try {
     // Create cache key
-    const key = getFixturesCacheKey(cacheLocation, date, isLive);
+    const key = getFixturesCacheKey({ prefix: cacheLocation, date, isLive });
     
     // Update timestamp for frequent refresh items
     if (strategy === CacheStrategy.FREQUENT_REFRESH) {
@@ -227,11 +257,15 @@ export const cacheFixtures = async (
 };
 
 // Get fixtures from storage
-export const getFixturesFromStorage = async (
-  date: string, 
-  env: any,
-  live?: boolean
-): Promise<{ fixtures: Fixture[] | null; source: string; forceRefresh?: boolean }> => {
+export const getFixturesFromStorage = async ({
+  date,
+  env,
+  live = false
+}: {
+  date: string;
+  env: any;
+  live?: boolean;
+}): Promise<{ fixtures: Fixture[] | null; source: string; forceRefresh?: boolean }> => {
   // Create the cache provider
   const provider = createR2CacheProvider(env.FOOTBALL_CACHE);
   
@@ -239,20 +273,20 @@ export const getFixturesFromStorage = async (
   const isLive = !!live;
   
   // Check for date transition
-  await checkDateTransition(env, provider);
+  await checkDateTransition({ env, provider });
   
   // Get the appropriate cache location prefix for this date
   const cacheLocation = getFixturesCacheLocation(date);
   
   // Get strategy and TTL
-  const { strategy, ttl } = getFixturesCacheStrategy(date, isLive);
+  const { strategy, ttl } = getFixturesCacheStrategy({ date, isLive });
   
   const startTime = performance.now();
   console.log(`🔍 Retrieving fixtures for ${date}${isLive ? ' (live)' : ''}`);
   
   try {
     // Create cache key
-    const key = getFixturesCacheKey(cacheLocation, date, isLive);
+    const key = getFixturesCacheKey({ prefix: cacheLocation, date, isLive });
     
     // For frequent refresh, check if we need to force refresh
     if (strategy === CacheStrategy.FREQUENT_REFRESH) {
@@ -296,4 +330,3 @@ export const getFixturesFromStorage = async (
     return { fixtures: null, source: 'Error', forceRefresh: true };
   }
 };
-

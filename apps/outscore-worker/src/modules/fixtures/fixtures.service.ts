@@ -28,11 +28,11 @@ export const fixturesService = {
       let fixtures: Fixture[];
       
       // Get live fixtures
-      const { fixtures: cached, source: cacheSource, forceRefresh } = await getFixturesFromStorage(
-        format(new Date(), 'yyyy-MM-dd'), 
-        env, 
-        true
-      );
+      const { fixtures: cached, source: cacheSource, forceRefresh } = await getFixturesFromStorage({
+        date: format(new Date(), 'yyyy-MM-dd'),
+        env,
+        live: true
+      });
       
       if (cached && !forceRefresh) {
         source = cacheSource;
@@ -53,14 +53,14 @@ export const fixturesService = {
         
         // Cache the fixtures
         console.log('💾 Caching live fixtures...');
-        await cacheFixtures(
-          format(new Date(), 'yyyy-MM-dd'), 
-          fixtures, 
-          env, 
-          ctx, 
-          true, 
-          true
-        );
+        await cacheFixtures({
+          date: format(new Date(), 'yyyy-MM-dd'),
+          fixtures,
+          env,
+          ctx,
+          live: true,
+          forceUpdate: true
+        });
       }
       
       return {
@@ -74,11 +74,11 @@ export const fixturesService = {
     let fixtures: Fixture[];
     
     // Get fixtures for specific date
-    const { fixtures: cachedFixtures, source: storageSource, forceRefresh } = await getFixturesFromStorage(
-      queryDate, 
-      env, 
-      false
-    );
+    const { fixtures: cachedFixtures, source: storageSource, forceRefresh } = await getFixturesFromStorage({
+      date: queryDate,
+      env,
+      live: false
+    });
     
     if (cachedFixtures && !forceRefresh) {
       source = storageSource;
@@ -100,14 +100,14 @@ export const fixturesService = {
       // Cache the fixtures with forced R2 update for today's data
       console.log('💾 Caching fixtures...');
       const forceR2Update = queryDate === format(new Date(), 'yyyy-MM-dd');
-      await cacheFixtures(
-        queryDate, 
-        fixtures, 
-        env, 
-        ctx, 
-        false, 
-        forceR2Update
-      );
+      await cacheFixtures({
+        date: queryDate,
+        fixtures,
+        env,
+        ctx,
+        live: false,
+        forceUpdate: forceR2Update
+      });
     }
     
     return {
