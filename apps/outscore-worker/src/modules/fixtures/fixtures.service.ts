@@ -3,6 +3,7 @@ import { Fixture, FormattedFixturesResponse } from '@outscore/shared-types';
 import { getFootballApiFixtures } from '../../pkg/util/football-api';
 import { formatFixtures } from './utils';
 import { getFixturesFromStorage, cacheFixtures } from './cache.service';
+import { createR2CacheProvider, createCacheService } from '../cache';
 
 /**
  * Fixtures Service
@@ -14,14 +15,19 @@ export const fixturesService = {
     timezone = "UTC",
     live,
     env,
-    ctx
+    ctx,
+    cacheService
   }: { 
     date?: string; 
     timezone: string;
     live?: 'all';
     env: any;
     ctx: any;
+    cacheService?: ReturnType<typeof createCacheService>;
   }): Promise<{ data: FormattedFixturesResponse; source: string }> {
+    // Create cache service if not provided
+    const cacheServiceInstance = cacheService || createCacheService(createR2CacheProvider(env.FOOTBALL_CACHE));
+
     if (live === 'all') {
       let source = 'API';
       let fixtures: Fixture[];
@@ -30,7 +36,8 @@ export const fixturesService = {
       const { fixtures: cached, source: cacheSource, forceRefresh } = await getFixturesFromStorage(
         format(new Date(), 'yyyy-MM-dd'), 
         env, 
-        true
+        true,
+        cacheServiceInstance
       );
       
       if (cached && !forceRefresh) {
@@ -52,7 +59,15 @@ export const fixturesService = {
         
         // Cache the fixtures
         console.log('💾 Caching live fixtures...');
-        await cacheFixtures(format(new Date(), 'yyyy-MM-dd'), fixtures, env, ctx, true, true);
+        await cacheFixtures(
+          format(new Date(), 'yyyy-MM-dd'), 
+          fixtures, 
+          env, 
+          ctx, 
+          true, 
+          true,
+          cacheServiceInstance
+        );
       }
       
       return {
@@ -69,7 +84,8 @@ export const fixturesService = {
     const { fixtures: cachedFixtures, source: storageSource, forceRefresh } = await getFixturesFromStorage(
       queryDate, 
       env, 
-      false
+      false,
+      cacheServiceInstance
     );
     
     if (cachedFixtures && !forceRefresh) {
@@ -92,7 +108,15 @@ export const fixturesService = {
       // Cache the fixtures with forced R2 update for today's data
       console.log('💾 Caching fixtures...');
       const forceR2Update = queryDate === format(new Date(), 'yyyy-MM-dd');
-      await cacheFixtures(queryDate, fixtures, env, ctx, false, forceR2Update);
+      await cacheFixtures(
+        queryDate, 
+        fixtures, 
+        env, 
+        ctx, 
+        false, 
+        forceR2Update,
+        cacheServiceInstance
+      );
     }
     
     return {

@@ -3,8 +3,7 @@ import { cors } from 'hono/cors';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { format } from 'date-fns';
-import { isValidTimezone } from './modules/timezones';
-import { fixturesService } from './modules/fixtures/fixtures.service';
+import { isValidTimezone, fixturesService, createR2CacheProvider, createCacheService } from './modules';
 
 interface Env {
   FOOTBALL_CACHE: R2Bucket;
@@ -77,13 +76,18 @@ async function refreshTodayFixtures(env: any) {
       }
     };
     
+    // Initialize cache providers
+    const cacheProvider = createR2CacheProvider(env.FOOTBALL_CACHE);
+    const cacheService = createCacheService(cacheProvider);
+    
     // Fetch fresh data for today
     await fixturesService.getFixtures({
       date: today,
       timezone: 'UTC',
       live: undefined,
       env,
-      ctx: mockCtx
+      ctx: mockCtx,
+      cacheService
     });
     
     console.log('✅ BACKGROUND: Successfully refreshed today\'s fixtures data');
@@ -119,6 +123,10 @@ app.get('/fixtures', zValidator('query', dateSchema), async (c) => {
   const requestStartTime = performance.now();
   
   try {
+    // Initialize cache providers
+    const cacheProvider = createR2CacheProvider(c.env.FOOTBALL_CACHE);
+    const cacheService = createCacheService(cacheProvider);
+    
     // Create UTC date objects for consistency
     const now = new Date();
     const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -151,7 +159,8 @@ app.get('/fixtures', zValidator('query', dateSchema), async (c) => {
       timezone, 
       live,
       env: c.env,
-      ctx: c.executionCtx
+      ctx: c.executionCtx,
+      cacheService
     });
     
     // Calculate load time for headers
