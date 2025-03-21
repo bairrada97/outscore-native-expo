@@ -91,7 +91,7 @@ const handleDateTransition = async (oldDate: string, newDate: string) => {
 const checkIfDataExists = async (date: string, env: any, folder: 'today' | 'historical' | 'future' = 'today'): Promise<boolean> => {
   try {
     const key = `${folder}/${date}.json`;
-    const data = await env.FIXTURES_BUCKET.get(key);
+    const data = await env.MATCH_DATA.get(key);
     return data !== null;
   } catch (err) {
     console.error(`❌ Error checking if data exists for ${date} in ${folder}:`, 
@@ -107,18 +107,18 @@ const migrateFixturesToHistorical = async (date: string, env: any): Promise<void
     const targetKey = `historical/${date}.json`;
     
     // Get data from source
-    const data = await env.FIXTURES_BUCKET.get(sourceKey);
+    const data = await env.MATCH_DATA.get(sourceKey);
     if (!data) {
       console.log(`⚠️ No data found for ${sourceKey}, skipping migration`);
       return;
     }
     
     // Put data to target
-    await env.FIXTURES_BUCKET.put(targetKey, data);
+    await env.MATCH_DATA.put(targetKey, data);
     console.log(`✅ Migrated ${sourceKey} to ${targetKey}`);
     
     // Delete source
-    await env.FIXTURES_BUCKET.delete(sourceKey);
+    await env.MATCH_DATA.delete(sourceKey);
     console.log(`🗑️ Deleted ${sourceKey} after migration`);
   } catch (err) {
     console.error('❌ Error migrating fixtures to historical:', 
@@ -133,18 +133,18 @@ const migrateFixturesToToday = async (date: string, env: any): Promise<void> => 
     const targetKey = `today/${date}.json`;
     
     // Get data from source
-    const data = await env.FIXTURES_BUCKET.get(sourceKey);
+    const data = await env.MATCH_DATA.get(sourceKey);
     if (!data) {
       console.log(`⚠️ No data found for ${sourceKey}, skipping migration`);
       return;
     }
     
     // Put data to target
-    await env.FIXTURES_BUCKET.put(targetKey, data);
+    await env.MATCH_DATA.put(targetKey, data);
     console.log(`✅ Migrated ${sourceKey} to ${targetKey}`);
     
     // Delete source
-    await env.FIXTURES_BUCKET.delete(sourceKey);
+    await env.MATCH_DATA.delete(sourceKey);
     console.log(`🗑️ Deleted ${sourceKey} after migration`);
   } catch (err) {
     console.error('❌ Error migrating fixtures to today:', 
