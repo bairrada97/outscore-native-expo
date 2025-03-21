@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { fixturesService } from './fixtures.service';
-import { isValidTimezone } from '../timezones/timezones.service';
+import { isValidTimezone } from '../timezones';
 
 const fixturesRoutes = new Hono();
 
