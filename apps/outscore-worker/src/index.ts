@@ -1,41 +1,97 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { zValidator } from '@hono/zod-validator';
+import { secureHeaders } from 'hono/secure-headers';
+import { rateLimiter } from 'hono-rate-limiter';
+
 import { z } from 'zod';
 import { format } from 'date-fns';
 import { isValidTimezone, fixturesService, createR2CacheProvider } from './modules';
 import { getUtcDateInfo } from './modules/fixtures/date.utils';
+import { botProtection } from './utils';
 
 interface Env {
   FOOTBALL_CACHE: R2Bucket;
   FOOTBALL_API_URL: string;
   RAPIDAPI_KEY: string;
+  API_KEY_SECRET: string;
+  OUTSCORE_RATE_LIMITER: any; // Cloudflare rate limiter binding
+  APPROVED_ORIGINS: string;
 }
+
+// Define approved origins to be consistent
+// Make it a let instead of const so it can be updated from environment
+let approvedOrigins = ['https://outscore.live', 'http://localhost:3000', 'http://localhost:8081'];
 
 const app = new Hono<{ Bindings: Env }>();
 
-// Add CORS middleware
-app.use('*', cors({
-  origin: '*', 
-  allowMethods: ['GET', 'POST', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization'],
-  exposeHeaders: [
-    'Content-Length', 
-    'X-Source', 
-    'X-Response-Time', 
-    'X-TTL', 
-    'X-UTC-Today', 
-    'X-Requested-Date', 
-    'X-Is-Today', 
-    'X-Data-Age',
-    'X-In-Three-Day-Window',
-    'X-Cache-Status',
-    'Cache-Control',
-    'Pragma',
-    'Expires'
-  ],
-  maxAge: 600,
+// Add secure headers middleware
+app.use('*', secureHeaders({
+  strictTransportSecurity: 'max-age=63072000; includeSubDomains; preload',
+  xContentTypeOptions: 'nosniff',
+  xFrameOptions: 'DENY',
+  xXssProtection: '1; mode=block'
 }));
+
+// Bot protection to block common scrapers and bots
+// Skip for health checks
+app.use('*', async (c, next) => {
+  if (c.req.path === '/health') {
+    await next();
+    return;
+  }
+  
+  // Apply bot protection middleware
+  await botProtection({
+    // Exclude some legit bots if needed
+    blockedUserAgents: ['semrush', 'ahrefs']
+  })(c, next);
+});
+
+// CORS middleware with origin-based authentication
+app.use('*', async (c, next) => {
+  // Get approved origins from environment
+  const envOrigins = c.env.APPROVED_ORIGINS;
+  if (envOrigins) {
+    approvedOrigins = envOrigins.split(',');
+  }
+  
+  // Get the request origin
+  const origin = c.req.header('origin');
+  
+  // Handle OPTIONS requests with appropriate CORS headers
+  if (c.req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': origin && approvedOrigins.includes(origin) ? origin : '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
+        'Access-Control-Max-Age': '86400', // 24 hours
+      }
+    });
+  }
+  
+  // If health check, skip auth entirely
+  if (c.req.path === '/health') {
+    await next();
+    return;
+  }
+  
+  // Primary authentication: Check if the request is from an approved origin
+  if (origin && approvedOrigins.includes(origin)) {
+    // Request is from an approved frontend origin - allow it
+    await next();
+    return;
+  }
+  
+  // If we get here, the request is not from an approved origin
+  // Block access without requiring an API key
+  return c.json({
+    error: 'unauthorized',
+    message: 'Access to this API is restricted to approved origins only'
+  }, 401);
+});
 
 // Health check
 app.get('/health', (c) => c.json({ status: 'ok' }));
@@ -208,52 +264,80 @@ app.get('/fixtures', zValidator('query', dateSchema), async (c) => {
   }
 });
 
+// Add CORS headers to all responses
+app.use('*', async (c, next) => {
+  // Process the request first
+  await next();
+  
+  // Get the origin from request
+  const origin = c.req.header('origin');
+  
+  // If origin is allowed, add CORS headers to response
+  if (origin && approvedOrigins.includes(origin)) {
+    c.res.headers.set('Access-Control-Allow-Origin', origin);
+    c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
+    c.res.headers.set('Access-Control-Expose-Headers', 'Content-Length, X-Source, X-Response-Time, X-TTL, X-UTC-Today, X-Requested-Date, X-Is-Today, X-Data-Age, X-In-Three-Day-Window, X-Cache-Status, Cache-Control, Pragma, Expires');
+  }
+});
+
 export default {
   async fetch(request: Request, env: any, ctx: ExecutionContext): Promise<Response> {
     // Initialize background refresh timer on first request
     startBackgroundRefreshTimer(env);
     
-    // Configure CORS for all responses
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Expose-Headers': 'X-Response-Time, X-Source, X-TTL, X-UTC-Today, X-Requested-Date, X-In-Three-Day-Window, X-Cache-Status, X-Is-Today, X-Data-Age, Cache-Control, Pragma, Expires',
-    };
-
+    // Get the origin from the request
+    const origin = request.headers.get('Origin') || '';
+    
+    // Check if the origin is allowed
+    const isAllowedOrigin = origin && approvedOrigins.some(approved => approved === origin);
+    
     // Handle OPTIONS request for CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
-        headers: corsHeaders,
+        headers: {
+          'Access-Control-Allow-Origin': isAllowedOrigin ? origin : 'null',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
+          'Access-Control-Max-Age': '86400', // 24 hours
+        },
+      });
+    }
+    
+    // For non-OPTIONS requests, check origin for direct browser access
+    if (!isAllowedOrigin && !request.headers.get('X-API-Key') && request.url.indexOf('/health') === -1) {
+      return new Response(JSON.stringify({
+        error: 'unauthorized',
+        message: 'Access to this API is restricted to approved origins only'
+      }), {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
     }
 
-    // Create a request context with timing info
+    // Create request context with timing info
     const requestStartTime = performance.now();
     
-    // Create Hono app context
-    const c = app.fetch(request, env, ctx);
-    
-    // Create response with timing and CORS headers
-    const response = await c;
-    const headers = new Headers(response.headers);
+    // Process the request with the Hono app
+    const response = await app.fetch(request, env, ctx);
     
     // Add response time
     const responseTime = (performance.now() - requestStartTime).toFixed(2);
-    headers.set('X-Response-Time', `${responseTime}ms`);
+    response.headers.set('X-Response-Time', `${responseTime}ms`);
     
-    // Add CORS headers
-    Object.entries(corsHeaders).forEach(([key, value]) => {
-      headers.set(key, value);
-    });
+    // Add CORS headers for allowed origins
+    if (isAllowedOrigin) {
+      response.headers.set('Access-Control-Allow-Origin', origin);
+      response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
+      response.headers.set('Access-Control-Expose-Headers', 'X-Response-Time, X-Source, X-TTL, X-UTC-Today, X-Requested-Date, X-In-Three-Day-Window, X-Cache-Status, X-Is-Today, X-Data-Age, Cache-Control, Pragma, Expires');
+    }
     
-    // Return enhanced response
-    return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
+    // Return final response
+    return response;
   },
   
   // Initialize the worker - runs once when the worker starts
