@@ -67,7 +67,7 @@ async function refreshTodayFixtures(env: any) {
     const today = format(utcNow, 'yyyy-MM-dd');
     
     // Get date info
-    const dateInfo = getUtcDateInfo(today);
+    const dateInfo = getUtcDateInfo({ date: today });
     
     // Force refresh from API
     console.log(`🌐 BACKGROUND: Fetching fresh fixtures for ${dateInfo.utcToday} from API`);
@@ -131,7 +131,7 @@ app.get('/fixtures', zValidator('query', dateSchema), async (c) => {
     const queryDate = date || defaultDate;
     
     // Use the getUtcDateInfo function to get date information
-    const dateInfo = getUtcDateInfo(queryDate);
+    const dateInfo = getUtcDateInfo({ date: queryDate });
     const { isDateInThreeDayWindow, isTodayData, utcToday } = dateInfo;
     
     console.log(`📅 Handling request for date=${queryDate}, timezone=${timezone}, live=${live}, today=${utcToday}`);

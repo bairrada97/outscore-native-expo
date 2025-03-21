@@ -3,6 +3,7 @@ import { Fixture } from '@outscore/shared-types';
 import { createR2CacheProvider, TTL } from '../cache';
 import { CacheConfig, CacheResult, CacheStrategy, StrategyResult } from '../cache/types';
 import { CacheProvider} from '../cache/provider.interface';
+import { getUtcDateInfo } from './date.utils';
 
 // In-memory state for tracking updates (fixtures-specific)
 let lastUpdateTimestamp = 0;
@@ -35,14 +36,14 @@ export const getFixturesCacheKey = ({
  * Determines which fixture-specific cache location should be used for the given date
  */
 export const getFixturesCacheLocation = (date: string): FixturesCacheLocation => {
-  const now = new Date();
-  const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const today = format(utcNow, 'yyyy-MM-dd');
+  const { utcToday, isTodayData } = getUtcDateInfo({ date });
   
-  if (date === today) {
+  if (isTodayData) {
     return FixturesCacheLocation.TODAY;
   }
   
+  const now = new Date();
+  const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const targetDate = new Date(date);
   if (targetDate < utcNow) {
     return FixturesCacheLocation.HISTORICAL;
@@ -68,14 +69,7 @@ export const handleFixturesDateTransition = async <T>({
   try {
     console.log(`🔄 Handling fixtures date transition from ${oldDate} to ${newDate}`);
     
-    // Calculate yesterday and tomorrow
-    const yesterdayObj = new Date(newDate);
-    yesterdayObj.setUTCDate(yesterdayObj.getUTCDate() - 1);
-    const yesterdayStr = format(yesterdayObj, 'yyyy-MM-dd');
-    
-    const tomorrowObj = new Date(newDate);
-    tomorrowObj.setUTCDate(tomorrowObj.getUTCDate() + 1);
-    const tomorrowStr = format(tomorrowObj, 'yyyy-MM-dd');
+    const { yesterdayStr, tomorrowStr } = getUtcDateInfo({ date: newDate });
     
     console.log(`📆 Date reference points: yesterday=${yesterdayStr}, today=${newDate}, tomorrow=${tomorrowStr}`);
     
@@ -116,30 +110,22 @@ export const getFixturesCacheStrategy = ({
   date: string;
   isLive: boolean;
 }): StrategyResult => {
-  const now = new Date();
-  const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const today = format(utcNow, 'yyyy-MM-dd');
-  
   // For live data, always use frequent refresh
   if (isLive) {
     return { strategy: CacheStrategy.FREQUENT_REFRESH, ttl: TTL.SHORT };
   }
   
-  // Calculate yesterday and tomorrow in UTC
-  const utcYesterday = new Date(utcNow);
-  utcYesterday.setDate(utcNow.getDate() - 1);
-  const yesterdayStr = format(utcYesterday, 'yyyy-MM-dd');
-  
-  const utcTomorrow = new Date(utcNow);
-  utcTomorrow.setDate(utcNow.getDate() + 1);
-  const tomorrowStr = format(utcTomorrow, 'yyyy-MM-dd');
+  // Use shared date utility to calculate date info
+  const { utcToday, yesterdayStr, tomorrowStr, isDateInThreeDayWindow } = getUtcDateInfo({ date });
   
   // For today, yesterday, and tomorrow, use frequent refresh
-  if (date === today || date === yesterdayStr || date === tomorrowStr) {
+  if (isDateInThreeDayWindow) {
     return { strategy: CacheStrategy.FREQUENT_REFRESH, ttl: TTL.SHORT };
   }
   
   // For historical data, use long-term caching
+  const now = new Date();
+  const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const targetDate = new Date(date);
   if (targetDate < utcNow) {
     return { strategy: CacheStrategy.LONG_TERM, ttl: TTL.STANDARD };

@@ -3,7 +3,11 @@ import { createR2CacheProvider } from '../cache';
 import { handleFixturesDateTransition } from './cache.service';
 
 // Get UTC date information for the current request
-export const getUtcDateInfo = (date: string): {
+export const getUtcDateInfo = ({
+  date
+}: {
+  date: string;
+}): {
   utcToday: string;
   yesterdayStr: string;
   tomorrowStr: string;
@@ -49,14 +53,9 @@ export const handleDateTransition = async (oldDate: string, newDate: string, env
     // Create provider directly
     const r2Provider = createR2CacheProvider(env.FOOTBALL_CACHE);
     
-    // Calculate yesterday and tomorrow
-    const yesterdayObj = new Date(newDate);
-    yesterdayObj.setUTCDate(yesterdayObj.getUTCDate() - 1);
-    const yesterdayStr = format(yesterdayObj, 'yyyy-MM-dd');
-    
-    const tomorrowObj = new Date(newDate);
-    tomorrowObj.setUTCDate(tomorrowObj.getUTCDate() + 1);
-    const tomorrowStr = format(tomorrowObj, 'yyyy-MM-dd');
+    // Use shared date utility to get date info
+    const dateInfo = getUtcDateInfo({ date: newDate });
+    const { yesterdayStr, tomorrowStr } = dateInfo;
     
     console.log(`📆 Date reference points: yesterday=${yesterdayStr}, today=${newDate}, tomorrow=${tomorrowStr}`);
     
