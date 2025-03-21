@@ -13,7 +13,7 @@ export const getR2Key = (date: string, live?: boolean): string => {
 // Check if data exists in a specific folder
 export const checkIfDataExists = async (date: string, env: any, folder: 'today' | 'historical' | 'future' = 'today'): Promise<boolean> => {
   try {
-    const key = `${folder}/${date}.json`;
+    const key = `${folder}/fixtures-${date}.json`;
     const data = await env.MATCH_DATA.get(key);
     return data !== null;
   } catch (err) {
@@ -22,12 +22,12 @@ export const checkIfDataExists = async (date: string, env: any, folder: 'today' 
     return false;
   }
 };
-
+ 
 // Migrate fixtures from today to historical
 export const migrateFixturesToHistorical = async (date: string, env: any): Promise<void> => {
   try {
-    const sourceKey = `today/${date}.json`;
-    const targetKey = `historical/${date}.json`;
+    const sourceKey = `today/fixtures-${date}.json`;
+    const targetKey = `historical/fixtures-${date}.json`;
     
     // Get data from source
     const data = await env.MATCH_DATA.get(sourceKey);
@@ -52,8 +52,8 @@ export const migrateFixturesToHistorical = async (date: string, env: any): Promi
 // Migrate fixtures from future to today
 export const migrateFixturesToToday = async (date: string, env: any): Promise<void> => {
   try {
-    const sourceKey = `future/${date}.json`;
-    const targetKey = `today/${date}.json`;
+    const sourceKey = `future/fixtures-${date}.json`;
+    const targetKey = `today/fixtures-${date}.json`;
     
     // Get data from source
     const data = await env.MATCH_DATA.get(sourceKey);

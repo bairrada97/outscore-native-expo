@@ -28,7 +28,13 @@ const handleGetFixtures = async (c: any) => {
     queryTimezone = timezone;
     live = isLive;
     
-    const fixtures = await fixturesService.getFixtures({ date, timezone, live });
+    const fixtures = await fixturesService.getFixtures({ 
+      date, 
+      timezone, 
+      live,
+      env: c.env,
+      ctx: c.executionCtx
+    });
       
     return c.json({
       success: true,

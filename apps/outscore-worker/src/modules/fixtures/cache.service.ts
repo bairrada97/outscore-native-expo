@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
 import { Fixture } from '@outscore/shared-types';
-import { isPast, TODAY_UPDATE_INTERVAL } from './utils';
-import { cacheFixturesInR2 } from './storage.utils';
+import { TODAY_UPDATE_INTERVAL } from './utils';
+import { cacheFixturesInR2, getR2Key } from './storage.utils';
 import { getUtcDateInfo, checkTimestampReset, checkBucketDateTransition } from './date.utils';
 
 // State management for cache service
@@ -188,7 +188,7 @@ export const getFixturesFromStorage = async (
     console.log('🔍 Checking R2...');
     
     // Check R2 for all dates
-    const r2Key = `${isTodayData ? 'today' : (isPast(date) ? 'historical' : 'future')}/fixtures-${date}${live ? '-live' : ''}.json`;
+    const r2Key = getR2Key(date, live);
     console.log(`🔍 Checking R2 with key: ${r2Key}`);
     
     const r2Object = await env.MATCH_DATA.get(r2Key);
@@ -200,7 +200,7 @@ export const getFixturesFromStorage = async (
       return { fixtures, source: 'R2', forceRefresh };
     }
     
-    return { fixtures: null, source: 'None', forceRefresh };
+    return { fixtures: null, source: 'None', forceRefresh: false };
   } catch (error) {
     const duration = (performance.now() - startTime).toFixed(2);
     console.error(`❌ Error during retrieval after ${duration}ms:`, error);
