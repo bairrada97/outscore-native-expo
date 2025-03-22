@@ -14,7 +14,7 @@ export const getUtcDateInfo = ({
   isDateInThreeDayWindow: boolean;
   isTodayData: boolean;
 } => {
-  // Create UTC date objects
+  // Create UTC date objects using current time
   const now = new Date();
   const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const utcToday = format(utcNow, 'yyyy-MM-dd');
@@ -28,8 +28,13 @@ export const getUtcDateInfo = ({
   utcTomorrow.setDate(utcNow.getDate() + 1);
   const tomorrowStr = format(utcTomorrow, 'yyyy-MM-dd');
   
+  // Compare the provided date against our UTC reference points
+  // This will correctly identify if a provided date is yesterday/today/tomorrow in UTC terms
   const isDateInThreeDayWindow = date === yesterdayStr || date === utcToday || date === tomorrowStr;
   const isTodayData = date === utcToday;
+  
+  // Enhanced logging for debugging
+  console.log(`🗓️ [DEBUG] Date comparison: input=${date}, utcToday=${utcToday}, match=${date === utcToday}`);
   
   return {
     utcToday,

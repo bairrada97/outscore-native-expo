@@ -21,7 +21,7 @@ interface Env {
 
 // Define approved origins to be consistent
 // Make it a let instead of const so it can be updated from environment
-let approvedOrigins = ['https://outscore.live', 'http://localhost:3000', 'http://localhost:8081'];
+let approvedOrigins = ['https://outscore.live', 'http://localhost:3000', 'http://localhost:8081', "http://10.0.2.2:3000"];
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -180,19 +180,8 @@ app.get('/fixtures', zValidator('query', dateSchema), async (c) => {
   const requestStartTime = performance.now();
   
   try {
-    // Get current UTC date as default
-    const now = new Date();
-    const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const defaultDate = format(utcNow, 'yyyy-MM-dd');
-    const queryDate = date || defaultDate;
-    
-    // Use the getUtcDateInfo function to get date information
-    const dateInfo = getUtcDateInfo({ date: queryDate });
-    const { isDateInThreeDayWindow, isTodayData, utcToday } = dateInfo;
-    
-    console.log(`📅 Handling request for date=${queryDate}, timezone=${timezone}, live=${live}, today=${utcToday}`);
-    console.log(`🔍 Date is ${isDateInThreeDayWindow ? 'within' : 'outside'} the 3-day window`);
-    
+    let queryDate = date;
+
     // Get fixtures from service
     const { data: fixtures, source } = await fixturesService.getFixtures({
       date: queryDate, 
@@ -205,47 +194,45 @@ app.get('/fixtures', zValidator('query', dateSchema), async (c) => {
     // Calculate load time for headers
     const responseTime = (performance.now() - requestStartTime).toFixed(2);
     
-    // Set standard headers
-    c.header('X-Response-Time', `${responseTime}ms`);
-    c.header('X-UTC-Today', dateInfo.utcToday);
-    c.header('X-Requested-Date', queryDate);
-    c.header('X-In-Three-Day-Window', isDateInThreeDayWindow ? 'true' : 'false');
-    c.header('X-Is-Today', isTodayData ? 'true' : 'false');
-    c.header('X-Source', source);
+    // // Set standard headers
+    // c.header('X-Response-Time', `${responseTime}ms`);
+    // c.header('X-User-Timezone', timezone);
+    // c.header('X-Requested-Date', queryDate);
+    // c.header('X-Source', source);
     
-    // Set data age text based on source and whether it's today's data
-    let dataAge = 'Unknown';
-    if (source === 'API') {
-      dataAge = '<15s';
-    } else if (source === 'R2') {
-      if (isTodayData) {
-        dataAge = '<20s';
-      } else {
-        dataAge = '<1h';
-      }
-    }
-    c.header('X-Data-Age', dataAge);
+    // // Set data age text based on source and whether it's today's data
+    // let dataAge = 'Unknown';
+    // if (source === 'API') {
+    //   dataAge = '<15s';
+    // } else if (source === 'R2') {
+    //   if (isUtcToday) {
+    //     dataAge = '<20s';
+    //   } else {
+    //     dataAge = '<1h';
+    //   }
+    // }
+    // c.header('X-Data-Age', dataAge);
     
-    // Set TTL header
-    const ttl = isTodayData ? 20 : 3600;
-    c.header('X-TTL', `${ttl}s`);
+    // // Set TTL header
+    // const ttl = isUtcToday ? 20 : 3600;
+    // c.header('X-TTL', `${ttl}s`);
     
-    // Set Cache-Control header to match our desired cache policy
-    if (isTodayData) {
-      // For today's data, use no-cache to force browser to revalidate with server on each request
-      // This allows our worker to decide to use its cache or not, but prevents browser caching
-      c.header('Cache-Control', 'no-cache, must-revalidate, max-age=0');
-      c.header('Pragma', 'no-cache');
-      c.header('Expires', '0');
-    } else if (isDateInThreeDayWindow) {
-      // For yesterday/tomorrow, also use no-store but with a longer stale-while-revalidate for CF
-      c.header('Cache-Control', 'no-cache, must-revalidate, max-age=0'); 
-      c.header('Pragma', 'no-cache');
-      c.header('Expires', '0');
-    } else {
-      // For older dates, allow longer caching
-      c.header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=7200');
-    }
+    // // Set Cache-Control header to match our desired cache policy
+    // if (isUtcToday) {
+    //   // For today's data, use no-cache to force browser to revalidate with server on each request
+    //   // This allows our worker to decide to use its cache or not, but prevents browser caching
+    //   c.header('Cache-Control', 'no-cache, must-revalidate, max-age=0');
+    //   c.header('Pragma', 'no-cache');
+    //   c.header('Expires', '0');
+    // } else if (isDateInThreeDayWindow) {
+    //   // For yesterday/tomorrow, also use no-store but with a longer stale-while-revalidate for CF
+    //   c.header('Cache-Control', 'no-cache, must-revalidate, max-age=0'); 
+    //   c.header('Pragma', 'no-cache');
+    //   c.header('Expires', '0');
+    // } else {
+    //   // For older dates, allow longer caching
+    //   c.header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=7200');
+    // }
     
     return c.json({
       status: 'success',
@@ -277,7 +264,7 @@ app.use('*', async (c, next) => {
     c.res.headers.set('Access-Control-Allow-Origin', origin);
     c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
-    c.res.headers.set('Access-Control-Expose-Headers', 'Content-Length, X-Source, X-Response-Time, X-TTL, X-UTC-Today, X-Requested-Date, X-Is-Today, X-Data-Age, X-In-Three-Day-Window, X-Cache-Status, Cache-Control, Pragma, Expires');
+    c.res.headers.set('Access-Control-Expose-Headers', 'Content-Length, X-Source, X-Response-Time, X-TTL, X-UTC-Today, X-User-Timezone, X-Requested-Date, X-Is-UTC-Today, X-Data-Age, X-In-Three-Day-Window, X-Cache-Status, Cache-Control, Pragma, Expires');
   }
 });
 
@@ -333,7 +320,7 @@ export default {
       response.headers.set('Access-Control-Allow-Origin', origin);
       response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
-      response.headers.set('Access-Control-Expose-Headers', 'X-Response-Time, X-Source, X-TTL, X-UTC-Today, X-Requested-Date, X-In-Three-Day-Window, X-Cache-Status, X-Is-Today, X-Data-Age, Cache-Control, Pragma, Expires');
+      response.headers.set('Access-Control-Expose-Headers', 'X-Response-Time, X-Source, X-TTL, X-UTC-Today, X-User-Timezone, X-Requested-Date, X-Is-UTC-Today, X-In-Three-Day-Window, X-Cache-Status, X-Data-Age, Cache-Control, Pragma, Expires');
     }
     
     // Return final response

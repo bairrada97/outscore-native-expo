@@ -7,7 +7,16 @@ import { getUtcDateInfo } from './date.utils';
 
 // In-memory state for tracking updates (fixtures-specific)
 let lastUpdateTimestamp = 0;
-let currentDateString = format(new Date(), 'yyyy-MM-dd');
+
+// Always use UTC for tracking the current date
+const getCurrentUtcDateString = (): string => {
+  const now = new Date();
+  const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return format(utcNow, 'yyyy-MM-dd');
+};
+
+// Initialize with current UTC date
+let currentDateString = getCurrentUtcDateString();
 
 // Fixture-specific cache location prefixes 
 export enum FixturesCacheLocation {
@@ -34,21 +43,29 @@ export const getFixturesCacheKey = ({
 
 /**
  * Determines which fixture-specific cache location should be used for the given date
+ * This compares the requested date with the current UTC date to determine
+ * if it should be stored in TODAY, HISTORICAL, or FUTURE folders
+ * 
+ * CRITICAL: This function is no longer used. Instead, we use direct string comparison.
+ * It is kept for backwards compatibility only.
  */
 export const getFixturesCacheLocation = (date: string): FixturesCacheLocation => {
-  const { utcToday, isTodayData } = getUtcDateInfo({ date });
+  console.warn('⚠️ DEPRECATED: getFixturesCacheLocation is deprecated, use direct string comparison instead');
   
-  if (isTodayData) {
+  // Get current UTC date for comparison
+  const currentUtcDate = getCurrentUtcDateString();
+  
+  // Compare the requested date with current UTC today
+  if (date === currentUtcDate) {
     return FixturesCacheLocation.TODAY;
   }
-  
-  const now = new Date();
-  const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const targetDate = new Date(date);
-  if (targetDate < utcNow) {
+   
+  // If request date is before UTC today, it's historical
+  if (date < currentUtcDate) {
     return FixturesCacheLocation.HISTORICAL;
   }
   
+  // If request date is after UTC today, it's future
   return FixturesCacheLocation.FUTURE;
 };
 
@@ -69,10 +86,37 @@ export const handleFixturesDateTransition = async <T>({
   try {
     console.log(`🔄 Handling fixtures date transition from ${oldDate} to ${newDate}`);
     
+    // Get date info based on the new current UTC date
     const { yesterdayStr, tomorrowStr } = getUtcDateInfo({ date: newDate });
     
     console.log(`📆 Date reference points: yesterday=${yesterdayStr}, today=${newDate}, tomorrow=${tomorrowStr}`);
     
+    // CRITICAL: First check if there might be data in both the future and today folders
+    // for the same date (this would be the bug we're fixing)
+    
+    // Check if the new date (today) has data in the future folder
+    const todayInFutureKey = getFixturesCacheKey({ prefix: FixturesCacheLocation.FUTURE, date: newDate });
+    const todayInFutureExists = await provider.exists(todayInFutureKey);
+    
+    // Check if new date has data in today folder already
+    const todayInTodayKey = getFixturesCacheKey({ prefix: FixturesCacheLocation.TODAY, date: newDate });
+    const todayInTodayExists = await provider.exists(todayInTodayKey);
+    
+    // If both exist, this is a problem - we have duplicated data
+    if (todayInFutureExists && todayInTodayExists) {
+      console.log(`⚠️ CRITICAL: Found duplicate data for ${newDate} in both FUTURE and TODAY folders. Fixing...`);
+      
+      // Delete the future copy and keep the today copy
+      await provider.delete(todayInFutureKey);
+      console.log(`🗑️ Deleted duplicate data for ${newDate} from FUTURE folder`);
+    }
+    // If only future exists, move it to today
+    else if (todayInFutureExists) {
+      console.log(`📦 Moving today's data (${newDate}) from future to today folder`);
+      await provider.move(todayInFutureKey, todayInTodayKey);
+    }
+    
+    // Now handle the old date (yesterday)
     // Move previous day's data to historical if it exists
     const oldFixturesKey = getFixturesCacheKey({ prefix: FixturesCacheLocation.TODAY, date: oldDate });
     const oldExists = await provider.exists(oldFixturesKey);
@@ -83,14 +127,18 @@ export const handleFixturesDateTransition = async <T>({
       await provider.move(oldFixturesKey, newKey);
     }
     
-    // Check if tomorrow's data exists and move it to today
-    const tomorrowFixturesKey = getFixturesCacheKey({ prefix: FixturesCacheLocation.FUTURE, date: tomorrowStr });
-    const tomorrowExists = await provider.exists(tomorrowFixturesKey);
+    // Finally, check if tomorrow's data exists and should be fixed
+    // Check for tomorrow in both folders
+    const tomorrowInFutureKey = getFixturesCacheKey({ prefix: FixturesCacheLocation.FUTURE, date: tomorrowStr });
+    const tomorrowInTodayKey = getFixturesCacheKey({ prefix: FixturesCacheLocation.TODAY, date: tomorrowStr });
     
-    if (tomorrowExists) {
-      console.log(`📦 Moving future data (${tomorrowStr}) to today folder`);
-      const newTodayKey = getFixturesCacheKey({ prefix: FixturesCacheLocation.TODAY, date: tomorrowStr });
-      await provider.move(tomorrowFixturesKey, newTodayKey);
+    const tomorrowInFutureExists = await provider.exists(tomorrowInFutureKey);
+    const tomorrowInTodayExists = await provider.exists(tomorrowInTodayKey);
+    
+    // If data for tomorrow is in TODAY, this is wrong - move it to FUTURE
+    if (tomorrowInTodayExists) {
+      console.log(`⚠️ CRITICAL: Found data for tomorrow (${tomorrowStr}) in TODAY folder. Moving to FUTURE...`);
+      await provider.move(tomorrowInTodayKey, tomorrowInFutureKey);
     }
     
     console.log('✅ Fixtures date transition handling completed');
@@ -115,19 +163,24 @@ export const getFixturesCacheStrategy = ({
     return { strategy: CacheStrategy.FREQUENT_REFRESH, ttl: TTL.SHORT };
   }
   
-  // Use shared date utility to calculate date info
-  const { utcToday, yesterdayStr, tomorrowStr, isDateInThreeDayWindow } = getUtcDateInfo({ date });
+  // Get current UTC date as the reference point
+  const currentUtcDate = getCurrentUtcDateString();
+  
+  // Use shared date utility to calculate date info with current UTC date as reference
+  const { utcToday, yesterdayStr, tomorrowStr } = getUtcDateInfo({ date: currentUtcDate });
   
   // For today, yesterday, and tomorrow, use frequent refresh
+  const isDateInThreeDayWindow = date === yesterdayStr || date === utcToday || date === tomorrowStr;
   if (isDateInThreeDayWindow) {
     return { strategy: CacheStrategy.FREQUENT_REFRESH, ttl: TTL.SHORT };
   }
   
+  // Parse dates for comparison
+  const requestDate = new Date(date);
+  const utcNowDate = new Date(utcToday);
+  
   // For historical data, use long-term caching
-  const now = new Date();
-  const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const targetDate = new Date(date);
-  if (targetDate < utcNow) {
+  if (requestDate < utcNowDate) {
     return { strategy: CacheStrategy.LONG_TERM, ttl: TTL.STANDARD };
   }
   
@@ -144,12 +197,17 @@ export const checkDateTransition = async ({
 }: {
   env: any;
   provider: CacheProvider<any>;
-}): Promise<void> => {
-  const now = new Date();
-  const nowDateString = format(now, 'yyyy-MM-dd');
+}): Promise<boolean> => {
+  // Always use UTC for getting the current date
+  const nowDateString = getCurrentUtcDateString();
   
   if (nowDateString !== currentDateString) {
     console.log(`📆 Date transition detected from ${currentDateString || 'initial'} to ${nowDateString}`);
+    
+    // CRITICAL: Clear in-memory update timestamp to force refresh
+    lastUpdateTimestamp = 0;
+    console.log(`⚠️ [CRITICAL FIX] Reset lastUpdateTimestamp to force data refresh after date transition`);
+    
     // Trigger date transition handling
     if (currentDateString) {
       try {
@@ -162,7 +220,13 @@ export const checkDateTransition = async ({
     
     // Update current date
     currentDateString = nowDateString;
+    
+    // Return true to indicate a date transition occurred
+    return true;
   }
+  
+  // No date transition
+  return false;
 };
 
 /**
@@ -174,7 +238,8 @@ export const cacheFixtures = async ({
   env,
   ctx,
   live = false,
-  forceUpdate = false
+  forceUpdate = false,
+  locationOverride
 }: {
   date: string;
   fixtures: Fixture[];
@@ -182,6 +247,7 @@ export const cacheFixtures = async ({
   ctx: any;
   live?: boolean;
   forceUpdate?: boolean;
+  locationOverride?: 'today' | 'historical' | 'future';
 }): Promise<boolean> => {
   // Create the cache provider
   const provider = createR2CacheProvider(env.FOOTBALL_CACHE);
@@ -189,11 +255,46 @@ export const cacheFixtures = async ({
   // Normalize live flag
   const isLive = !!live;
   
-  // Check for date transition
-  await checkDateTransition({ env, provider });
+  // Check for date transition - this might reset caches
+  const dateTransitionOccurred = await checkDateTransition({ env, provider });
+  if (dateTransitionOccurred) {
+    console.log('📅 Date transition occurred, using fresh cache settings');
+    // Force update is implicit due to lastUpdateTimestamp reset
+  }
   
-  // Get the appropriate cache location prefix for this date
-  const cacheLocation = getFixturesCacheLocation(date);
+  // Get current UTC date for folder placement decision
+  const currentUtcDate = getCurrentUtcDateString();
+  
+  // CRITICAL: Use locationOverride if provided, otherwise determine folder location automatically
+  let cacheLocation: FixturesCacheLocation;
+  
+  if (locationOverride) {
+    // Override the location with explicitly provided value
+    switch (locationOverride) {
+      case 'today':
+        cacheLocation = FixturesCacheLocation.TODAY;
+        break;
+      case 'historical':
+        cacheLocation = FixturesCacheLocation.HISTORICAL;
+        break;
+      case 'future':
+        cacheLocation = FixturesCacheLocation.FUTURE;
+        break;
+    }
+    console.log(`📂 [OVERRIDE] Using ${locationOverride} folder for ${date} as explicitly specified`);
+  } else {
+    // Use string comparison to ensure accurate date placement
+    if (date > currentUtcDate) {
+      cacheLocation = FixturesCacheLocation.FUTURE;
+      console.log(`📂 [FIXED LOGIC] Using FUTURE folder for ${date} (UTC today: ${currentUtcDate})`);
+    } else if (date < currentUtcDate) {
+      cacheLocation = FixturesCacheLocation.HISTORICAL;
+      console.log(`📂 [FIXED LOGIC] Using HISTORICAL folder for ${date} (UTC today: ${currentUtcDate})`);
+    } else {
+      cacheLocation = FixturesCacheLocation.TODAY;
+      console.log(`📂 [FIXED LOGIC] Using TODAY folder for ${date} (UTC today: ${currentUtcDate})`);
+    }
+  }
   
   // Get strategy and TTL
   const { strategy, ttl } = getFixturesCacheStrategy({ date, isLive });
@@ -204,6 +305,7 @@ export const cacheFixtures = async ({
   try {
     // Create cache key
     const key = getFixturesCacheKey({ prefix: cacheLocation, date, isLive });
+    console.log(`🔑 Using cache key: ${key}`);
     
     // Update timestamp for frequent refresh items
     if (strategy === CacheStrategy.FREQUENT_REFRESH) {
@@ -246,11 +348,13 @@ export const cacheFixtures = async ({
 export const getFixturesFromStorage = async ({
   date,
   env,
-  live = false
+  live = false,
+  locationOverride
 }: {
   date: string;
   env: any;
   live?: boolean;
+  locationOverride?: 'today' | 'historical' | 'future';
 }): Promise<{ fixtures: Fixture[] | null; source: string; forceRefresh?: boolean }> => {
   // Create the cache provider
   const provider = createR2CacheProvider(env.FOOTBALL_CACHE);
@@ -258,11 +362,47 @@ export const getFixturesFromStorage = async ({
   // Normalize live flag
   const isLive = !!live;
   
-  // Check for date transition
-  await checkDateTransition({ env, provider });
+  // Check for date transition - this might reset caches and move files
+  const dateTransitionOccurred = await checkDateTransition({ env, provider });
+  if (dateTransitionOccurred) {
+    console.log('📅 Date transition occurred, forcing cache refresh');
+    // Return to force an API refresh
+    return { fixtures: null, source: 'None', forceRefresh: true };
+  }
   
-  // Get the appropriate cache location prefix for this date
-  const cacheLocation = getFixturesCacheLocation(date);
+  // Get current UTC date for validation
+  const currentUtcDate = getCurrentUtcDateString();
+  
+  // CRITICAL: Use locationOverride if provided, otherwise determine folder location automatically
+  let cacheLocation: FixturesCacheLocation;
+  
+  if (locationOverride) {
+    // Override the location with explicitly provided value
+    switch (locationOverride) {
+      case 'today':
+        cacheLocation = FixturesCacheLocation.TODAY;
+        break;
+      case 'historical':
+        cacheLocation = FixturesCacheLocation.HISTORICAL;
+        break;
+      case 'future':
+        cacheLocation = FixturesCacheLocation.FUTURE;
+        break;
+    }
+    console.log(`🔍 [OVERRIDE] Looking in ${locationOverride} folder for ${date} as explicitly specified`);
+  } else {
+    // Use string comparison to ensure accurate date placement
+    if (date > currentUtcDate) {
+      cacheLocation = FixturesCacheLocation.FUTURE;
+      console.log(`🔍 [FIXED LOGIC] Looking in FUTURE folder for ${date} (UTC today: ${currentUtcDate})`);
+    } else if (date < currentUtcDate) {
+      cacheLocation = FixturesCacheLocation.HISTORICAL;
+      console.log(`🔍 [FIXED LOGIC] Looking in HISTORICAL folder for ${date} (UTC today: ${currentUtcDate})`);
+    } else {
+      cacheLocation = FixturesCacheLocation.TODAY;
+      console.log(`🔍 [FIXED LOGIC] Looking in TODAY folder for ${date} (UTC today: ${currentUtcDate})`);
+    }
+  }
   
   // Get strategy and TTL
   const { strategy, ttl } = getFixturesCacheStrategy({ date, isLive });
