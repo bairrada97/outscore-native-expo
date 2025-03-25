@@ -21,7 +21,7 @@ interface Env {
 
 // Define approved origins to be consistent
 // Make it a let instead of const so it can be updated from environment
-let approvedOrigins = ['https://outscore.live', 'http://localhost:3000', 'http://localhost:8081', "http://10.0.2.2:3000"];
+let approvedOrigins = ['https://outscore.live', 'http://localhost:3000', 'http://localhost:8081', "http://10.0.2.2:3000", "exp://,expo-development-client://"];
 
 const app = new Hono<{ Bindings: Env }>();
 

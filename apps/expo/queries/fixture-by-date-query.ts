@@ -9,6 +9,8 @@ const ONE_HOUR_CACHE = 60 * 60 * 1000; // 1 hour in milliseconds
 const FIVE_MINUTES_CACHE = 5 * 60 * 1000; // 5 minutes in milliseconds
 const THIRTY_SECONDS_CACHE = 30 * 1000; // 30 seconds
 const INFINITE_CACHE = Infinity; // For data that should be cached forever
+// Adding a constant for historical matches (1 week)
+const ONE_WEEK_CACHE = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
 
 // Define the query parameters type
 interface FixtureQueryParams {
@@ -107,12 +109,12 @@ export const fixturesByDateQuery = (args: FixtureQueryParams) => {
 		refetchOnWindowFocus = true; // Always refetch on focus
 		console.log(`${queryDate}: Today's matches - no client caching`);
 	} else if (isSameDay(requestDate, yesterday)) {
-		// YESTERDAY'S MATCHES: Cache forever, don't refetch
-		staleTime = INFINITE_CACHE; // Never stale
-		cacheTime = INFINITE_CACHE; // Cache forever
-		refetchOnMount = false; // Never refetch
-		refetchOnWindowFocus = false; // Never refetch on focus
-		console.log(`${queryDate}: Yesterday's matches - permanent cache`);
+		// YESTERDAY'S MATCHES: Cache for a day, but do refetch once on mount to get final scores
+		staleTime = ONE_HOUR_CACHE; // Stale after 1 hour  
+		cacheTime = ONE_DAY_CACHE; // Cache for one day
+		refetchOnMount = true; // Refetch once on mount to ensure we have final scores
+		refetchOnWindowFocus = false; // Don't refetch on focus
+		console.log(`${queryDate}: Yesterday's matches - limited caching with refresh on mount`);
 	} else if (isSameDay(requestDate, tomorrow)) {
 		// TOMORROW'S MATCHES: Cache until first match starts
 		staleTime = ONE_HOUR_CACHE; // Stale after 1 hour
@@ -121,12 +123,13 @@ export const fixturesByDateQuery = (args: FixtureQueryParams) => {
 		refetchOnWindowFocus = true; // Check if first match started when app comes to foreground
 		console.log(`${queryDate}: Tomorrow's matches - cache until first match`);
 	} else if (isBefore(requestDate, today)) {
-		// OLDER PAST MATCHES: Cache permanently
-		staleTime = INFINITE_CACHE; // Never stale
-		cacheTime = INFINITE_CACHE; // Cache forever
-		refetchOnMount = false; // Never refetch
-		refetchOnWindowFocus = false; // Never refetch on focus
-		console.log(`${queryDate}: Older past matches - permanent cache`);
+		// OLDER PAST MATCHES: Cache with a finite time instead of forever
+		// This ensures historical matches will eventually be refreshed
+		staleTime = ONE_DAY_CACHE; // Stale after one day
+		cacheTime = ONE_WEEK_CACHE; // Cache for up to a week
+		refetchOnMount = true; // Refetch once on mount to ensure we have final data
+		refetchOnWindowFocus = false; // Don't refetch on focus
+		console.log(`${queryDate}: Older past matches - cached with weekly refresh`);
 	} else {
 		// FUTURE MATCHES (beyond tomorrow): Cache with regular updates
 		staleTime = ONE_HOUR_CACHE; // Stale after 1 hour
