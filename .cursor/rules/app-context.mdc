@@ -1,3 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
 Outscore App Context
 
 Overview:
@@ -65,4 +70,13 @@ Common Use Cases:
 3. User plans ahead by viewing future fixtures
 4. User reviews past match results
 
+Edge Cases:
+- Data is stored in UTC, user is in a different timezone and if its really far away from UTC it will have some matches from UTC + day before/day after UTC which for him both are still on same day so his list of matches for today needs to contain some different UTC days.
+- User timezone is different from UTC, so his today is different from UTC today which means R2 needs always have data from UTC but user needs to see correct data for his timezone
+
 This context represents a modern sports application with focus on performance, user experience, and efficient data management. The application handles real-time data while maintaining smooth performance through various optimization techniques.
+
+
+
+
+

@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
 import { Fixture, FormattedFixturesResponse } from '@outscore/shared-types';
 import { getFootballApiFixtures } from '../../pkg/util/football-api';
-import { formatFixtures } from './utils';
+import { formatFixtures, filterFixturesByTimezone } from './utils';
 import { getFixturesFromStorage, cacheFixtures } from './cache.service';
 import { createR2CacheProvider } from '../cache';
 import { getUtcDateInfo } from './date.utils';
@@ -42,7 +42,7 @@ export const fixturesService = {
     live?: 'all';
     env: any;
     ctx: any;
-  }): Promise<{ data: FormattedFixturesResponse; source: string }> {
+  }): Promise<{ data: FormattedFixturesResponse; source: string; originalMatchCount: number }> {
     if (live === 'all') {
       let source = 'API';
       let fixtures: Fixture[];
@@ -93,9 +93,19 @@ export const fixturesService = {
         });
       }
       
+      // Save original count before filtering
+      const originalMatchCount = fixtures.length;
+      
+      // Apply timezone filtering if not UTC
+      if (timezone !== 'UTC') {
+        // For live fixtures, use the current UTC date for filtering
+        fixtures = filterFixturesByTimezone(fixtures, utcDate, timezone);
+      }
+      
       return {
         data: formatFixtures(fixtures, timezone),
-        source
+        source,
+        originalMatchCount
       };
     }
 
@@ -109,67 +119,110 @@ export const fixturesService = {
     
     console.log(`📆 Request for fixtures: requested date=${requestedDate}, current UTC date=${currentUtcDate}, difference=${requestedDate > currentUtcDate ? 'future' : (requestedDate < currentUtcDate ? 'past' : 'today')}`);
     
-    let source = 'API';
-    let fixtures: Fixture[];
+    // For non-UTC timezones, we may need to fetch adjacent dates to ensure we get all matches
+    // that fall on the requested date in the user's timezone
+    const needsAdjacentDates = timezone !== 'UTC';
+    let allFixtures: Fixture[] = [];
+    let primarySource = 'API';
     
-    // Directly get the correct cache location based on UTC time
-    let cacheLocationOverride: 'today' | 'historical' | 'future';
+    // Helper function to get the day before or after a date
+    const getAdjacentDate = (date: string, offsetDays: number): string => {
+      const dateObj = new Date(date);
+      dateObj.setDate(dateObj.getDate() + offsetDays);
+      return format(dateObj, 'yyyy-MM-dd');
+    };
     
-    if (requestedDate > currentUtcDate) {
-      cacheLocationOverride = 'future';
-      console.log(`🚨 [ROOT FIX] Using future location for ${requestedDate} as it's after UTC today (${currentUtcDate})`);
-    } else if (requestedDate < currentUtcDate) {
-      cacheLocationOverride = 'historical';
-      console.log(`🚨 [ROOT FIX] Using historical location for ${requestedDate} as it's before UTC today (${currentUtcDate})`);
-    } else {
-      cacheLocationOverride = 'today';
-      console.log(`🚨 [ROOT FIX] Using today location for ${requestedDate} as it matches UTC today (${currentUtcDate})`);
-    }
+    // Dates to fetch - for UTC we only need the requested date,
+    // for other timezones we need to fetch adjacent dates as well
+    const datesToFetch = needsAdjacentDates 
+      ? [
+          getAdjacentDate(requestedDate, -1), // Day before
+          requestedDate,                      // Requested date
+          getAdjacentDate(requestedDate, 1)   // Day after
+        ]
+      : [requestedDate];
     
-    // Get fixtures for specific date
-    const { fixtures: cachedFixtures, source: storageSource, forceRefresh } = await getFixturesFromStorage({
-      date: requestedDate, // Use normalized date for consistent R2 bucket access
-      env,
-      live: false,
-      locationOverride: cacheLocationOverride // Pass explicit location
-    });
+    console.log(`🗓️ Will fetch fixtures for these UTC dates: ${datesToFetch.join(', ')}`);
     
-    if (cachedFixtures && !forceRefresh) {
-      source = storageSource;
-      fixtures = cachedFixtures;
-      console.log(`✅ Using ${fixtures.length} fixtures from ${source}`);
-    } else {
-      // Fetch from API and cache
-      console.log('🌐 Fetching fixtures directly from API...');
-      const response = await getFootballApiFixtures(
-        requestedDate, // Use normalized date for consistent API calls
-        undefined, 
-        env.FOOTBALL_API_URL, 
-        env.RAPIDAPI_KEY
-      );
-      fixtures = response.response;
-      source = 'API';
-      console.log(`✅ Received ${fixtures.length} fixtures from API`);
+    // Fetch fixtures for each date
+    for (const fetchDate of datesToFetch) {
+      // Determine cache location based on relation to current UTC date
+      let cacheLocationOverride: 'today' | 'historical' | 'future';
       
-      // Cache the fixtures with forced R2 update for today's data
-      console.log('💾 Caching fixtures...');
-      const isUtcToday = requestedDate === currentUtcDate;
+      if (fetchDate > currentUtcDate) {
+        cacheLocationOverride = 'future';
+      } else if (fetchDate < currentUtcDate) {
+        cacheLocationOverride = 'historical';
+      } else {
+        cacheLocationOverride = 'today';
+      }
       
-      // Pass explicit location override
-      await cacheFixtures({
-        date: requestedDate, // Use normalized date for consistent R2 bucket access
-        fixtures,
+      console.log(`🔍 Fetching fixtures for UTC date ${fetchDate} (${cacheLocationOverride})`);
+      
+      // Get fixtures for this date
+      const { fixtures: dateFixtures, source: dateSource, forceRefresh } = await getFixturesFromStorage({
+        date: fetchDate,
         env,
-        ctx,
         live: false,
-        forceUpdate: isUtcToday,
         locationOverride: cacheLocationOverride
       });
+      
+      if (dateFixtures && !forceRefresh) {
+        // If the main date's source is API but an adjacent date comes from cache,
+        // we still consider the overall source as API for consistency
+        if (fetchDate === requestedDate) {
+          primarySource = dateSource;
+        }
+        allFixtures = [...allFixtures, ...dateFixtures];
+        console.log(`✅ Added ${dateFixtures.length} fixtures from ${dateSource} for date ${fetchDate}`);
+      } else {
+        // Fetch from API and cache
+        console.log(`🌐 Fetching fixtures for ${fetchDate} directly from API...`);
+        const response = await getFootballApiFixtures(
+          fetchDate,
+          undefined, 
+          env.FOOTBALL_API_URL, 
+          env.RAPIDAPI_KEY
+        );
+        
+        const apiFixtures = response.response;
+        if (fetchDate === requestedDate) {
+          primarySource = 'API';
+        }
+        
+        allFixtures = [...allFixtures, ...apiFixtures];
+        console.log(`✅ Added ${apiFixtures.length} fixtures from API for date ${fetchDate}`);
+        
+        // Cache the fixtures
+        console.log(`💾 Caching fixtures for ${fetchDate}...`);
+        const isUtcToday = fetchDate === currentUtcDate;
+        
+        await cacheFixtures({
+          date: fetchDate,
+          fixtures: apiFixtures,
+          env,
+          ctx,
+          live: false,
+          forceUpdate: isUtcToday,
+          locationOverride: cacheLocationOverride
+        });
+      }
+    }
+    
+    // Save original count before filtering
+    const originalMatchCount = allFixtures.length;
+    console.log(`📊 Total fixtures across all fetched dates: ${originalMatchCount}`);
+    
+    // Now filter to only show fixtures that occur on the requested date in the user's timezone
+    if (timezone !== 'UTC') {
+      console.log(`🌐 Applying timezone-specific filtering for ${timezone}`);
+      allFixtures = filterFixturesByTimezone(allFixtures, requestedDate, timezone);
     }
     
     return {
-      data: formatFixtures(fixtures, timezone),
-      source
+      data: formatFixtures(allFixtures, timezone),
+      source: primarySource,
+      originalMatchCount
     };
   }
 };

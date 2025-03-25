@@ -1,5 +1,5 @@
 import { format, isBefore, startOfDay } from 'date-fns';
-import { formatInTimeZone } from 'date-fns-tz';
+import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
 import { 
   Fixture, 
   FormattedFixturesResponse,
@@ -49,6 +49,57 @@ export const isWithinDisplayRange = (date: string): boolean => {
   return targetDate >= twoDaysBefore && targetDate <= twoDaysAfter;
 };
 
+/**
+ * Filters fixtures to only include those that match the requested date in the user's timezone
+ * This solves the specific edge case where users in different timezones request the same date
+ * but should receive different sets of matches based on their local day
+ * 
+ * @param fixtures List of all fixtures for the date range (typically in UTC)
+ * @param requestedDate The date requested by the user (format: YYYY-MM-DD)
+ * @param timezone The user's timezone (e.g. "America/Detroit", "Asia/Tokyo")
+ * @returns Filtered array of fixtures that match the requested date in the user's timezone
+ */
+export const filterFixturesByTimezone = (
+  fixtures: Fixture[], 
+  requestedDate: string, 
+  timezone: string = 'UTC'
+): Fixture[] => {
+  // Early return if no fixtures or timezone is UTC (no filtering needed)
+  if (fixtures.length === 0 || timezone === 'UTC') {
+    return fixtures;
+  }
+  
+  console.log(`🌍 Filtering ${fixtures.length} fixtures for date ${requestedDate} in timezone ${timezone}`);
+  
+  // Create start and end timestamps for the requested date in the user's timezone
+  // First, get the user's local date
+  const userLocalDateStart = new Date(`${requestedDate}T00:00:00`);
+  const userLocalDateEnd = new Date(`${requestedDate}T23:59:59.999`);
+  
+  // Convert local date start and end to UTC timestamps
+  // We need to set the timezone of the provided date string to the user's timezone,
+  // then get the UTC time that represents midnight in that timezone
+  const userStartTimeUtc = toZonedTime(userLocalDateStart, timezone);
+  const userEndTimeUtc = toZonedTime(userLocalDateEnd, timezone);
+  
+  console.log(`⏰ User timezone day boundaries in UTC: Start=${userStartTimeUtc.toISOString()}, End=${userEndTimeUtc.toISOString()}`);
+  
+  // Filter fixtures to only include those within the user's timezone day
+  const filteredFixtures = fixtures.filter(fixture => {
+    const fixtureTime = new Date(fixture.fixture.date);
+    
+    // Format the fixture date in the user's timezone to get the display date
+    const fixtureLocalDate = formatInTimeZone(fixtureTime, timezone, 'yyyy-MM-dd');
+    
+    // We want fixtures where the local display date matches the requested date
+    return fixtureLocalDate === requestedDate;
+  });
+  
+  console.log(`✅ Filtered down to ${filteredFixtures.length} fixtures that occur during ${requestedDate} in ${timezone}`);
+  
+  return filteredFixtures;
+};
+
 // Format the fixtures data for client consumption
 export const formatFixtures = (fixtures: Fixture[], timezone: string = 'UTC'): FormattedFixturesResponse => {
   const countries: FormattedCountry[] = [];
@@ -95,7 +146,7 @@ export const formatFixtures = (fixtures: Fixture[], timezone: string = 'UTC'): F
     // Create formatted match
     const match: FormattedMatch = {
       id: fixture.fixture.id,
-      date: format(matchDateTime, 'yyyy-MM-dd'),
+      date: formatInTimeZone(matchDateTime, timezone, 'yyyy-MM-dd'),
       time: formattedTime,
       timestamp: Math.floor(matchDateTime.getTime() / 1000),
       timezone: fixture.fixture.timezone,

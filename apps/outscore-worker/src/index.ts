@@ -183,7 +183,7 @@ app.get('/fixtures', zValidator('query', dateSchema), async (c) => {
     let queryDate = date;
 
     // Get fixtures from service
-    const { data: fixtures, source } = await fixturesService.getFixtures({
+    const { data: fixtures, source, originalMatchCount } = await fixturesService.getFixtures({
       date: queryDate, 
       timezone, 
       live,
@@ -191,6 +191,18 @@ app.get('/fixtures', zValidator('query', dateSchema), async (c) => {
       ctx: c.executionCtx
     });
     
+    // Count total matches across all leagues for testing purposes
+    let filteredMatchCount = 0;
+    fixtures.forEach(country => {
+      country.leagues.forEach(league => {
+        filteredMatchCount += league.matches.length;
+      });
+    });
+    
+    // Add detailed comparison logging to help debug timezone issues
+    console.log(`📊 MATCH COUNTS: originalCount=${originalMatchCount}, afterTimezoneProcessing=${filteredMatchCount}, timezone=${timezone}`);
+    console.log(`   This shows our timezone filtering: ${timezone === 'UTC' ? 'in UTC we show all UTC matches' : 'we filter to only show matches that occur on the local date in ' + timezone}`);
+
     // Calculate load time for headers
     const responseTime = (performance.now() - requestStartTime).toFixed(2);
     
@@ -239,6 +251,10 @@ app.get('/fixtures', zValidator('query', dateSchema), async (c) => {
       date: queryDate,
       timezone,
       source,
+      matchCount: {
+        original: originalMatchCount,
+        filtered: filteredMatchCount
+      },
       data: fixtures
     });
   } catch (error) {
@@ -246,7 +262,11 @@ app.get('/fixtures', zValidator('query', dateSchema), async (c) => {
     return c.json({
       status: 'error',
       message: 'Failed to fetch fixtures',
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
+      matchCount: {
+        original: 0,
+        filtered: 0
+      }
     }, 500);
   }
 });

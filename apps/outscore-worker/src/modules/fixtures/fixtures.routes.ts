@@ -6,6 +6,18 @@ import { isValidTimezone } from '../timezones';
 
 const fixturesRoutes = new Hono();
 
+/**
+ * Validation schema for fixtures request
+ * 
+ * date: YYYY-MM-DD format, represents the date in the user's local timezone
+ * timezone: User's timezone (e.g., "America/Detroit", "Asia/Tokyo")
+ *   - Defaults to UTC if not provided
+ *   - Used to properly filter fixtures that occur on the requested date in that timezone
+ * 
+ * Note: The same date in different timezones will return different sets of fixtures
+ * based on the local day in that timezone. For example, 2025-03-25 in Tokyo vs Detroit
+ * will show different matches because of the timezone difference.
+ */
 const dateSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional(),
   timezone: z.string()
@@ -35,14 +47,27 @@ const handleGetFixtures = async (c: any) => {
       env: c.env,
       ctx: c.executionCtx
     });
+    
+    // Count total matches across all leagues for testing purposes
+    let filteredMatchCount = 0;
+    fixtures.data.forEach(country => {
+      country.leagues.forEach(league => {
+        filteredMatchCount += league.matches.length;
+      });
+    });
       
     return c.json({
       success: true,
-      data: fixtures,
+      data: fixtures.data,
       meta: {
         date: queryDate || new Date().toISOString().split('T')[0],
         timezone: queryTimezone,
         live: isLive,
+        matchCount: {
+          original: fixtures.originalMatchCount,
+          filtered: filteredMatchCount
+        },
+        source: fixtures.source
       } 
     });
   } catch (error: any) {
@@ -69,6 +94,10 @@ const handleGetFixtures = async (c: any) => {
         date: queryDate || new Date().toISOString().split('T')[0],
         timezone: queryTimezone,
         live: live,
+        matchCount: {
+          original: 0,
+          filtered: 0
+        }
       }
     }, statusCode);
   }
