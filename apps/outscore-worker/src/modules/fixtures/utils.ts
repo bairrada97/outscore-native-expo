@@ -7,6 +7,7 @@ import {
   FormattedMatch,
   FixtureStatusShort
 } from '@outscore/shared-types';
+import { formatDateInTimezone } from './timezone.utils';
 
 // Constants
 export const TODAY_UPDATE_INTERVAL = 15;
@@ -70,8 +71,8 @@ export const filterFixturesByTimezone = (fixtures: Fixture[], requestedDate: str
 
   // Process each fixture once and group by local date
   fixtures.forEach(fixture => {
-    const fixtureDate = fixture.fixture.date;
-    const localDate = formatInTimeZone(new Date(fixtureDate), timezone, 'yyyy-MM-dd');
+    // Use the fixture's date directly without creating a new Date object
+    const localDate = formatDateInTimezone(fixture.fixture.date, timezone, 'yyyy-MM-dd');
     
     if (!fixturesByLocalDate.has(localDate)) {
       fixturesByLocalDate.set(localDate, []);
@@ -114,22 +115,16 @@ export const formatFixtures = (fixtures: Fixture[], timezone: string = 'UTC'): F
       country.leagues.push(league);
     }
     
-    // Format match time based on timezone
-    const matchDateTime = new Date(fixture.fixture.date);
-    let formattedTime;
-    
-    try {
-      formattedTime = formatInTimeZone(matchDateTime, timezone, 'HH:mm');
-    } catch (e) {
-      formattedTime = format(matchDateTime, 'HH:mm');
-    }
+    // Format match time and date based on timezone
+    const formattedTime = formatDateInTimezone(fixture.fixture.date, timezone, 'HH:mm');
+    const localDate = formatDateInTimezone(fixture.fixture.date, timezone, 'yyyy-MM-dd');
     
     // Add match to league
     league.matches.push({
       id: fixture.fixture.id,
-      date: formatInTimeZone(matchDateTime, timezone, 'yyyy-MM-dd'),
+      date: localDate,
       time: formattedTime,
-      timestamp: Math.floor(matchDateTime.getTime() / 1000),
+      timestamp: Math.floor(new Date(fixture.fixture.date).getTime() / 1000),
       timezone: fixture.fixture.timezone,
       status: {
         short: fixture.fixture.status.short as FixtureStatusShort,

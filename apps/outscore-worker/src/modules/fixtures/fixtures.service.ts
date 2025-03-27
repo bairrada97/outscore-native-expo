@@ -5,6 +5,7 @@ import { formatFixtures, filterFixturesByTimezone } from './utils';
 import { getFixturesFromStorage, cacheFixtures } from './cache.service';
 import { createR2CacheProvider } from '../cache';
 import { getUtcDateInfo } from './date.utils';
+import { getCurrentHourInTimezone, getDatesToFetch, formatDateInTimezone } from './timezone.utils';
 
 /**
  * If no date is provided, returns the current UTC date
@@ -125,22 +126,15 @@ export const fixturesService = {
     let allFixtures: Fixture[] = [];
     let primarySource = 'API';
     
-    // Helper function to get the day before or after a date
-    const getAdjacentDate = (date: string, offsetDays: number): string => {
-      const dateObj = new Date(date);
-      dateObj.setDate(dateObj.getDate() + offsetDays);
-      return format(dateObj, 'yyyy-MM-dd');
-    };
+    // Determine which dates to fetch based on timezone
+    let datesToFetch: string[] = [requestedDate];
     
-    // Dates to fetch - for UTC we only need the requested date,
-    // for other timezones we need to fetch adjacent dates as well
-    const datesToFetch = needsAdjacentDates 
-      ? [
-          getAdjacentDate(requestedDate, -1), // Day before
-          requestedDate,                      // Requested date
-          getAdjacentDate(requestedDate, 1)   // Day after
-        ]
-      : [requestedDate];
+    if (needsAdjacentDates) {
+      const currentHour = getCurrentHourInTimezone(timezone);
+      const { datesToFetch: strategyDates, reason } = getDatesToFetch(requestedDate, timezone, currentHour);
+      datesToFetch = strategyDates;
+      console.log(`🌍 ${reason}`);
+    }
     
     console.log(`🗓️ Will fetch fixtures for these UTC dates: ${datesToFetch.join(', ')}`);
     
