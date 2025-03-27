@@ -1,86 +1,100 @@
-import { transformFixtureData } from '@/utils/transform-fixture-data'
 import { CardMatch } from '../CardMatch/CardMatch'
 import { CardsBlock } from '../CardsBlock/CardsBlock'
-import { CountryItem } from '../CountryItem/CountryItem'
-import {
-	Accordion,
-	AccordionContent,
-	AccordionItem,
-	AccordionTrigger,
-} from '../ui/accordion'
+import CountryItem from '../CountryItem/CountryItem'
 import { View } from 'react-native'
 import { LegendList } from '@legendapp/list'
 import { Text } from '../ui/text'
 import { memo, useCallback, useMemo, useState } from 'react'
-import { Collapsible } from 'react-native-fast-collapsible'
-import SimpleCollapsible from '../Collapsible'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion'
+import { FormattedCountry, FormattedMatch } from '@outscore/shared-types'
 
 type ItemProps = {
-	item: Country
+	item: FormattedCountry
 	onPress: () => void
 	isSelected: boolean
 }
 
-// ... existing code ...
-
 // Memoize the Item component to prevent unnecessary re-renders
-const Item = memo(({ item, onPress, isSelected }: ItemProps) => (
-	<CountryItem
-		image={'cenas'}
-		name={'cenas'}
-		totalMatches={0}
-		totalLiveMatches={0}
-	/>
-	// <AccordionItem key={item.country} value={item.country}>
-	// 	<AccordionTrigger onPress={onPress}>
+const Item = memo(({ item, onPress, isSelected }: ItemProps) => {
+	// Calculate total matches and live matches
+	const totalMatches = item.leagues.reduce((acc, league) => acc + league.matches.length, 0)
+	const totalLiveMatches = item.leagues.reduce((acc, league) => {
+		return acc + league.matches.filter(match => match.status?.elapsed !== null).length
+	}, 0)
 
-	// 	</AccordionTrigger>
-	// 	<AccordionContent>
-
-	// 	</AccordionContent>
-	// </AccordionItem>
-))
+	return (
+		<AccordionItem value={item.name}>
+			<AccordionTrigger onPress={onPress}>
+				<CountryItem
+					image={item.flag?.toLowerCase() || item.name.toLowerCase()}
+					name={item.name}
+					totalMatches={totalMatches}
+					totalLiveMatches={totalLiveMatches}
+				/>
+			</AccordionTrigger>
+			<AccordionContent>
+				{item.leagues.map(league => (
+					<CardsBlock key={league.id} title={league.name}>
+						{league.matches.map((match, index) => (
+							<CardMatch
+								key={match.id}
+								fixture={match}
+								isLastMatch={index === league.matches.length - 1}
+							/>
+						))}
+					</CardsBlock>
+				))}
+			</AccordionContent>
+		</AccordionItem>
+	)
+})
 
 export default function FixturesList({
 	data,
 	groupBy = true,
 }: {
-	data: any
+	data: FormattedCountry[]
 	groupBy?: boolean
 }) {
-	const [selectedId, setSelectedId] = useState<string>()
+	const [selectedIds, setSelectedIds] = useState<string[]>([])
 
 	// Memoize the renderItem function
 	const renderItem = useCallback(
-		({ item }: { item: any }) => {
-			const isSelected = item.country === selectedId
+		({ item }: { item: FormattedCountry }) => {
+			const isSelected = selectedIds.includes(item.name)
 			return (
 				<Item
 					item={item}
-					onPress={() => setSelectedId(item.country)}
+					onPress={() => {
+						setSelectedIds(prev => 
+							isSelected 
+								? prev.filter(id => id !== item.name)
+								: [...prev, item.name]
+						)
+					}}
 					isSelected={isSelected}
 				/>
 			)
 		},
-		[selectedId],
-	)
-
-	// Memoize the data array
-	const listData = useMemo(
-		() => Object.values(data?.response || {}),
-		[data?.response],
+		[selectedIds],
 	)
 
 	return (
-		<View>
-			<FlashList
-				data={listData}
-				renderItem={renderItem}
-				keyExtractor={item => item.country}
-				extraData={selectedId}
-				estimatedItemSize={40}
-				drawDistance={125}
-			/>
+		<View className="flex-1">
+			<Accordion
+				type="multiple"
+				value={selectedIds}
+				onValueChange={setSelectedIds}
+				className="w-full"
+			>
+				<LegendList
+					data={data}
+					renderItem={renderItem}
+					keyExtractor={item => item.name}
+					estimatedItemSize={40}
+					drawDistance={125}
+				/>
+			</Accordion>
 		</View>
 	)
 }

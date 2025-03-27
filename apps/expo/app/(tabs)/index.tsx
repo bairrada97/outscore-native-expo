@@ -205,8 +205,6 @@ export default function HomeScreen() {
 					renderScene={renderScene}
 					onIndexChange={handleIndexChange}
 					initialLayout={{ width: layout.width - (layout.width / 7) }}
-					lazy={true}
-					lazyPreloadDistance={1}
 					swipeEnabled={!isWeb}
 					commonOptions={commonOptions}
 					renderTabBar={renderTabBar}

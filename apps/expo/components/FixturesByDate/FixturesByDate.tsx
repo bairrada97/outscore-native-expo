@@ -36,7 +36,7 @@ export default function FixturesByDate({
 				</View>
 				<TitleSection>All Competitions</TitleSection>
 				<View className="px-16">
-					{/* <FixturesList data={groupedData} /> */}
+					<FixturesList data={data} />
 				</View>
 			</ScrollView>
 		</>
