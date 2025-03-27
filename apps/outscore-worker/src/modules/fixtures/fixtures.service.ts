@@ -3,28 +3,8 @@ import { Fixture, FormattedFixturesResponse } from '@outscore/shared-types';
 import { getFootballApiFixtures } from '../../pkg/util/football-api';
 import { formatFixtures, filterFixturesByTimezone } from './utils';
 import { getFixturesFromStorage, cacheFixtures } from './cache.service';
-import { createR2CacheProvider } from '../cache';
-import { getUtcDateInfo } from './date.utils';
+import { getUtcDateInfo, normalizeToUtcDate } from './date.utils';
 import { getCurrentHourInTimezone, getDatesToFetch, formatDateInTimezone } from './timezone.utils';
-
-/**
- * If no date is provided, returns the current UTC date
- * Otherwise, returns the original date string without modification
- * This ensures we respect the user's requested date
- */
-const normalizeToUtcDate = (dateStr?: string): string => {
-  if (!dateStr) {
-    // Get current UTC date if no date provided
-    const now = new Date();
-    // Create a UTC date with time set to 00:00:00
-    const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    return format(utcNow, 'yyyy-MM-dd');
-  }
-  
-  // If a date string is provided, use it directly without any conversion
-  // This preserves the user's requested date exactly as specified
-  return dateStr.trim();
-};
 
 /**
  * Fixtures Service

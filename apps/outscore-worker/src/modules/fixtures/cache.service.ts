@@ -3,17 +3,10 @@ import { Fixture } from '@outscore/shared-types';
 import { createR2CacheProvider, TTL } from '../cache';
 import { CacheConfig, CacheResult, CacheStrategy, StrategyResult } from '../cache/types';
 import { CacheProvider} from '../cache/provider.interface';
-import { getUtcDateInfo } from './date.utils';
+import { getUtcDateInfo, getCurrentUtcDateString } from './date.utils';
 
 // In-memory state for tracking updates (fixtures-specific)
 let lastUpdateTimestamp = 0;
-
-// Always use UTC for tracking the current date
-const getCurrentUtcDateString = (): string => {
-  const now = new Date();
-  const utcNow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  return format(utcNow, 'yyyy-MM-dd');
-};
 
 // Initialize with current UTC date
 let currentDateString = getCurrentUtcDateString();
