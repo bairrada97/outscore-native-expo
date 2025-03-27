@@ -15,6 +15,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { TextClassContext } from './text';
+import { LinearGradient } from 'expo-linear-gradient';
 
 
 const Accordion = React.forwardRef<AccordionPrimitive.RootRef, AccordionPrimitive.RootProps>(
@@ -65,15 +66,28 @@ const AccordionTrigger = React.forwardRef<
 
   return (
     <TextClassContext.Provider value='native:text-lg font-medium web:group-hover:underline'>
-      <AccordionPrimitive.Header className='flex'>
+      <AccordionPrimitive.Header className='flex h-40'>
         <AccordionPrimitive.Trigger ref={ref} {...props} asChild>
           <Trigger
             className={cn(
-              'flex flex-row web:flex-1 items-center justify-between py-4 web:transition-all group web:focus-visible:outline-none web:focus-visible:ring-1 web:focus-visible:ring-muted-foreground',
+              'flex flex-row web:flex-1 items-center justify-between py-4 web:transition-all group web:focus-visible:outline-none web:focus-visible:ring-1 web:focus-visible:ring-muted-foreground relative flex-1 rounded-1/2  before:content-[""] before:rounded-1/2 dark:shadow-sha-06 dark:before:border-neu-10 box-border shadow-sha-01 will-change-transform before:shadow-sha-01 before:absolute before:left-1/2 before:top-1/2  before:-translate-x-1/2 before:-translate-y-1/2 before:border-2 before:border-neu-01 before:flex-1 before:w-full before:h-full',
+              isExpanded ? 'dark:before:border-m-01--light-03  before:shadow-sha-06 before:absolute before:left-1/2 before:top-1/2  before:-translate-x-1/2 before:-translate-y-1/2 before:border-2 before:border-neu-01 before:flex-1 before:w-full before:h-full before:bg-gra-01': '',
               className
             )}
           >
-            <>{children}</>
+            <View className="relative flex-1">
+              {Platform.OS === 'web' ? (
+                <View className="absolute inset-0 z-[-1] bg-gra-01 opacity-0 data-[state=open]:opacity-100 transition-opacity" />
+              ) : (
+                <LinearGradient
+                  colors={['rgb(255, 255, 255)', 'rgb(240, 241, 241)', 'rgb(255, 255, 255)']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  className="absolute inset-0 z-[-1] opacity-0 data-[state=open]:opacity-100"
+                />
+              )}
+              {typeof children === 'function' ? children({ pressed: false, hovered: false }) : children}
+            </View> 
             <Animated.View style={chevronStyle}>
               <ChevronDown size={18} className={'text-foreground shrink-0'} />
             </Animated.View>

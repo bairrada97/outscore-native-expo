@@ -30,7 +30,7 @@ const Item = memo(({ item, onPress, isSelected }: ItemProps) => {
 					name={item.name}
 					totalMatches={totalMatches}
 					totalLiveMatches={totalLiveMatches}
-				/>
+				/> 
 			</AccordionTrigger>
 			<AccordionContent>
 				{item.leagues.map(league => (

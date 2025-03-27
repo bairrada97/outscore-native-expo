@@ -1,8 +1,8 @@
+import { FormattedCountry, FormattedLeague } from '@outscore/shared-types'
 import { CardMatch } from '../CardMatch/CardMatch'
 import { CardsBlock } from '../CardsBlock/CardsBlock'
 import { NoResultsBox } from '../NoResultsBox/NoResultsBox'
 import { View } from 'react-native'
-import { FormattedCountry, FormattedLeague } from '../../../../packages/shared-types/dist'
 
 const List = ({ data, groupBy }: { data: FormattedLeague[]; groupBy?: boolean }) => {
 	return (
