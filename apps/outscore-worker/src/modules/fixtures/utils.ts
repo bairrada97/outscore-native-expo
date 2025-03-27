@@ -59,61 +59,47 @@ export const isWithinDisplayRange = (date: string): boolean => {
  * @param timezone The user's timezone (e.g. "America/Detroit", "Asia/Tokyo")
  * @returns Filtered array of fixtures that match the requested date in the user's timezone
  */
-export const filterFixturesByTimezone = (
-  fixtures: Fixture[], 
-  requestedDate: string, 
-  timezone: string = 'UTC'
-): Fixture[] => {
-  // Early return if no fixtures or timezone is UTC (no filtering needed)
-  if (fixtures.length === 0 || timezone === 'UTC') {
+export const filterFixturesByTimezone = (fixtures: Fixture[], requestedDate: string, timezone: string): Fixture[] => {
+  // Early return if timezone is UTC
+  if (timezone === 'UTC') {
     return fixtures;
   }
-  
-  console.log(`🌍 Filtering ${fixtures.length} fixtures for date ${requestedDate} in timezone ${timezone}`);
-  
-  // Create start and end timestamps for the requested date in the user's timezone
-  // First, get the user's local date
-  const userLocalDateStart = new Date(`${requestedDate}T00:00:00`);
-  const userLocalDateEnd = new Date(`${requestedDate}T23:59:59.999`);
-  
-  // Convert local date start and end to UTC timestamps
-  // We need to set the timezone of the provided date string to the user's timezone,
-  // then get the UTC time that represents midnight in that timezone
-  const userStartTimeUtc = toZonedTime(userLocalDateStart, timezone);
-  const userEndTimeUtc = toZonedTime(userLocalDateEnd, timezone);
-  
-  console.log(`⏰ User timezone day boundaries in UTC: Start=${userStartTimeUtc.toISOString()}, End=${userEndTimeUtc.toISOString()}`);
-  
-  // Filter fixtures to only include those within the user's timezone day
-  const filteredFixtures = fixtures.filter(fixture => {
-    const fixtureTime = new Date(fixture.fixture.date);
+
+  // Create a map to store fixtures by their local date in the target timezone
+  const fixturesByLocalDate = new Map<string, Fixture[]>();
+
+  // Process each fixture once and group by local date
+  fixtures.forEach(fixture => {
+    const fixtureDate = fixture.fixture.date;
+    const localDate = formatInTimeZone(new Date(fixtureDate), timezone, 'yyyy-MM-dd');
     
-    // Format the fixture date in the user's timezone to get the display date
-    const fixtureLocalDate = formatInTimeZone(fixtureTime, timezone, 'yyyy-MM-dd');
-    
-    // We want fixtures where the local display date matches the requested date
-    return fixtureLocalDate === requestedDate;
+    if (!fixturesByLocalDate.has(localDate)) {
+      fixturesByLocalDate.set(localDate, []);
+    }
+    fixturesByLocalDate.get(localDate)?.push(fixture);
   });
-  
-  console.log(`✅ Filtered down to ${filteredFixtures.length} fixtures that occur during ${requestedDate} in ${timezone}`);
-  
-  return filteredFixtures;
+
+  // Return only fixtures for the requested date
+  return fixturesByLocalDate.get(requestedDate) || [];
 };
 
 // Format the fixtures data for client consumption
 export const formatFixtures = (fixtures: Fixture[], timezone: string = 'UTC'): FormattedFixturesResponse => {
-  const countries: FormattedCountry[] = [];
+  // Pre-allocate maps for O(1) lookups
+  const countryMap = new Map<string, FormattedCountry>();
   
+  // Process fixtures in a single pass
   fixtures.forEach((fixture) => {
-    // Find country or create new one
-    let country = countries.find(c => c.name === fixture.league.country);
+    const countryName = fixture.league.country;
+    let country = countryMap.get(countryName);
+    
     if (!country) {
       country = {
-        name: fixture.league.country,
+        name: countryName,
         flag: fixture.league.flag,
         leagues: []
       };
-      countries.push(country);
+      countryMap.set(countryName, country);
     }
     
     // Find league or create new one
@@ -133,18 +119,13 @@ export const formatFixtures = (fixtures: Fixture[], timezone: string = 'UTC'): F
     let formattedTime;
     
     try {
-      formattedTime = formatInTimeZone(
-        matchDateTime, 
-        timezone, 
-        'HH:mm'
-      );
+      formattedTime = formatInTimeZone(matchDateTime, timezone, 'HH:mm');
     } catch (e) {
-      // Fallback to UTC if timezone is invalid
       formattedTime = format(matchDateTime, 'HH:mm');
     }
     
-    // Create formatted match
-    const match: FormattedMatch = {
+    // Add match to league
+    league.matches.push({
       id: fixture.fixture.id,
       date: formatInTimeZone(matchDateTime, timezone, 'yyyy-MM-dd'),
       time: formattedTime,
@@ -183,20 +164,16 @@ export const formatFixtures = (fixtures: Fixture[], timezone: string = 'UTC'): F
         home: fixture.goals.home,
         away: fixture.goals.away
       }
-    };
-    
-    // Add match to league
-    league.matches.push(match);
+    });
   });
   
-  // Sort countries alphabetically
+  // Convert map to array and sort once
+  const countries = Array.from(countryMap.values());
   countries.sort((a, b) => a.name.localeCompare(b.name));
   
-  // For each country, sort leagues by name
+  // Sort leagues and matches in a single pass
   countries.forEach(country => {
     country.leagues.sort((a, b) => a.name.localeCompare(b.name));
-    
-    // For each league, sort matches by time
     country.leagues.forEach(league => {
       league.matches.sort((a, b) => a.timestamp - b.timestamp);
     });

@@ -145,7 +145,7 @@ export const fixturesService = {
     console.log(`🗓️ Will fetch fixtures for these UTC dates: ${datesToFetch.join(', ')}`);
     
     // Fetch fixtures for each date
-    for (const fetchDate of datesToFetch) {
+    const fetchPromises = datesToFetch.map(async (fetchDate) => {
       // Determine cache location based on relation to current UTC date
       let cacheLocationOverride: 'today' | 'historical' | 'future';
       
@@ -173,8 +173,8 @@ export const fixturesService = {
         if (fetchDate === requestedDate) {
           primarySource = dateSource;
         }
-        allFixtures = [...allFixtures, ...dateFixtures];
         console.log(`✅ Added ${dateFixtures.length} fixtures from ${dateSource} for date ${fetchDate}`);
+        return dateFixtures;
       } else {
         // Fetch from API and cache
         console.log(`🌐 Fetching fixtures for ${fetchDate} directly from API...`);
@@ -190,7 +190,6 @@ export const fixturesService = {
           primarySource = 'API';
         }
         
-        allFixtures = [...allFixtures, ...apiFixtures];
         console.log(`✅ Added ${apiFixtures.length} fixtures from API for date ${fetchDate}`);
         
         // Cache the fixtures
@@ -206,8 +205,14 @@ export const fixturesService = {
           forceUpdate: isUtcToday,
           locationOverride: cacheLocationOverride
         });
+        
+        return apiFixtures;
       }
-    }
+    });
+    
+    // Fetch all dates in parallel
+    const results = await Promise.all(fetchPromises);
+    allFixtures = results.flat();
     
     // Save original count before filtering
     const originalMatchCount = allFixtures.length;

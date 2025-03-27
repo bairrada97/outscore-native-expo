@@ -125,6 +125,13 @@ export const handleFixturesDateTransition = async <T>({
       console.log(`📦 Moving previous day (${oldDate}) to historical folder`);
       const newKey = getFixturesCacheKey({ prefix: FixturesCacheLocation.HISTORICAL, date: oldDate });
       await provider.move(oldFixturesKey, newKey);
+      
+      // CRITICAL: Double-check and delete from today folder if it still exists
+      const stillExistsInToday = await provider.exists(oldFixturesKey);
+      if (stillExistsInToday) {
+        console.log(`🗑️ Cleaning up duplicate data for ${oldDate} from TODAY folder`);
+        await provider.delete(oldFixturesKey);
+      }
     }
     
     // Finally, check if tomorrow's data exists and should be fixed
