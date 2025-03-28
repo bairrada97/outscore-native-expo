@@ -22,7 +22,7 @@ const Item = memo(({ item }: ItemProps) => {
 	}, 0)
 
 	return (
-		<Animated.View layout={LinearTransition.duration(300)}>
+		<Animated.View layout={LinearTransition.duration(Platform.OS !== 'web' ? 300 : 0)}>
 			<AccordionItem value={item.name}>
 				<AccordionTrigger>
 					<CountryItem
@@ -109,8 +109,8 @@ export default function FixturesList({
 					estimatedItemSize={averageItemSize}
 					drawDistance={Platform.OS === 'web' ? 120 : 500}
 					maintainVisibleContentPosition={true}
-					onItemSizeChanged={handleItemSizeChanged}
-					waitForInitialLayout={true}
+					
+					waitForInitialLayout={Platform.OS !== 'web'}
 					recycleItems={false}
 				/>
 			</Accordion>
