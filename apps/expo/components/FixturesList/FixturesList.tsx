@@ -4,18 +4,16 @@ import CountryItem from '../CountryItem/CountryItem'
 import { View } from 'react-native'
 import { LegendList } from '@legendapp/list'
 import { Text } from '../ui/text'
-import { memo, useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useMemo } from 'react'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion'
 import { FormattedCountry, FormattedMatch } from '@outscore/shared-types'
 
 type ItemProps = {
 	item: FormattedCountry
-	onPress: () => void
-	isSelected: boolean
 }
 
 // Memoize the Item component to prevent unnecessary re-renders
-const Item = memo(({ item, onPress, isSelected }: ItemProps) => {
+const Item = memo(({ item }: ItemProps) => {
 	// Calculate total matches and live matches
 	const totalMatches = item.leagues.reduce((acc, league) => acc + league.matches.length, 0)
 	const totalLiveMatches = item.leagues.reduce((acc, league) => {
@@ -24,14 +22,14 @@ const Item = memo(({ item, onPress, isSelected }: ItemProps) => {
 
 	return (
 		<AccordionItem value={item.name}>
-			<AccordionTrigger onPress={onPress}>
+			<AccordionTrigger>
 				<CountryItem
 					image={item.flag?.toLowerCase() || item.name.toLowerCase()}
 					name={item.name}
 					totalMatches={totalMatches}
 					totalLiveMatches={totalLiveMatches}
 				/> 
-			</AccordionTrigger>
+			</AccordionTrigger> 
 			<AccordionContent>
 				{item.leagues.map(league => (
 					<CardsBlock key={league.id} title={league.name}>
@@ -56,35 +54,18 @@ export default function FixturesList({
 	data: FormattedCountry[]
 	groupBy?: boolean
 }) {
-	const [selectedIds, setSelectedIds] = useState<string[]>([])
-
 	// Memoize the renderItem function
 	const renderItem = useCallback(
 		({ item }: { item: FormattedCountry }) => {
-			const isSelected = selectedIds.includes(item.name)
-			return (
-				<Item
-					item={item}
-					onPress={() => {
-						setSelectedIds(prev => 
-							isSelected 
-								? prev.filter(id => id !== item.name)
-								: [...prev, item.name]
-						)
-					}}
-					isSelected={isSelected}
-				/>
-			)
+			return <Item item={item} />
 		},
-		[selectedIds],
+		[],
 	)
 
 	return (
 		<View className="flex-1">
 			<Accordion
 				type="multiple"
-				value={selectedIds}
-				onValueChange={setSelectedIds}
 				className="w-full"
 			>
 				<LegendList

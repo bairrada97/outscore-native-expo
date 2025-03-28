@@ -27,7 +27,7 @@ export const CalendarBarButtonScreen = () => {
 	return (
 		<View
 			className={cn(
-				'absolute left-0 z-10 flex h-48 flex-row items-center justify-start',
+				'absolute left-0 z-10 flex h-48 flex-row items-center justify-start dark:bg-neu-11 dark:shadow-sha-06 box-border bg-neu-01 shadow-sha-01',
 			)}
 			style={{
 				width: (isWeb ? 800 : screenWidth) / 7,
@@ -106,7 +106,8 @@ export default function HomeScreen() {
 				shadowOffset: { width: 0, height: 5 },
 				shadowOpacity: 0.12,
 				shadowRadius: 10,
-				left: (isWeb ? 800 : layout.width) / 7 
+				left: (isWeb ? 800 : layout.width) / 7,
+				height: 48
 			}}
 			indicatorContainerStyle={{
 				backgroundColor: 'white'
