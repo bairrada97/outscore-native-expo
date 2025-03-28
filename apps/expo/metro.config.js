@@ -6,19 +6,11 @@ const {
   } = require('react-native-reanimated/metro-config');
 
 const projectRoot = __dirname;
-const workspaceRoot = path.resolve(projectRoot, '../..');
+
 
 // Create the default Metro config
 const config = getDefaultConfig(projectRoot);
 
-// Add the workspace root to the watch folders so Metro can find our packages
-config.watchFolders = [workspaceRoot];
-
-// Configure resolver to handle workspace packages
-config.resolver.nodeModulesPaths = [
-  path.resolve(projectRoot, 'node_modules'),
-  path.resolve(workspaceRoot, 'node_modules'),
-];
 
 // Add support for importing from workspace packages
 config.resolver.disableHierarchicalLookup = true;
