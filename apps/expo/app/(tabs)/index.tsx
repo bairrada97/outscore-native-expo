@@ -1,4 +1,4 @@
-import {Dimensions, useWindowDimensions, View } from 'react-native'
+import {Dimensions, useWindowDimensions, View, Animated } from 'react-native'
 
 import { ReactNode, useEffect, useState, useMemo, useCallback, memo } from 'react'
 import { TabView, SceneMap, TabBarProps, Route, TabBar, TabDescriptor } from 'react-native-tab-view';
@@ -13,6 +13,7 @@ import SvgB022 from '@/components/ui/SvgIcons/B022';
 import { cn } from '@/utils/misc';
 import FixturesHomeScreen from '@/components/FixturesHomeScreen/FixturesHomeScreen';
 import { getDateRange, getInitialTabIndex } from '@/utils/date-utils';
+import { LinearGradient } from 'expo-linear-gradient';
 
 type CustomRoute = Route & {
   key: string;
@@ -43,6 +44,16 @@ export const CalendarBarButtonScreen = () => {
 
 // Memoized fixture screen component
 const MemoizedFixturesScreen = memo(FixturesHomeScreen);
+
+// Create a custom gradient component
+const GradientIndicator = memo(({ style }: { style: any }) => (
+  <LinearGradient
+    colors={['rgb(24,124,86)', 'rgb(38,151,108)']}
+    start={{ x: 0, y: 0 }}
+    end={{ x: 1, y: 0 }}
+    style={[style]}
+  />
+));
 
 export default function HomeScreen() {
 	const { date } = useGlobalSearchParams()
@@ -97,43 +108,101 @@ export default function HomeScreen() {
 	}, [dates, router, isNavigating]);
 
 	// Memoize the tab bar render function with improved press handling
-	const renderTabBar = useCallback((props: TabBarProps<CustomRoute>) => (
-		<TabBar
-			{...props}
-			style={{
-				elevation: 5,
-				shadowColor: 'rgb(19, 20, 19)',
-				shadowOffset: { width: 0, height: 5 },
-				shadowOpacity: 0.12,
-				shadowRadius: 10,
-				left: (isWeb ? 800 : layout.width) / 7,
-				height: 48
-			}}
-			indicatorContainerStyle={{
-				backgroundColor: 'white'
-			}}
-			indicatorStyle={{
-				height: '100%',
-				backgroundColor: 'rgb(24,124,86)',
-			}}
-			contentContainerStyle={{
-				overflow: 'hidden',
-			}}
-			tabStyle={{
-				width: (isWeb ? 800 : layout.width) / 7,
-				padding: 0,
-				alignContent: 'center',
-				marginHorizontal: 0,
-				marginVertical: 0,
-				borderLeftWidth: 1,
-				borderLeftColor: 'rgb(218,221,219)'
-			}}
-			pressColor='transparent'
-			pressOpacity={1}
-			activeColor='white'
-			inactiveColor='rgba(94,103,99, 0.7)'
-		/>
-	), [layout.width, isNavigating]);
+	const renderTabBar = useCallback((props: TabBarProps<CustomRoute>) => {
+		const inputRange = props.navigationState.routes.map((_, i) => i);
+		const translateX = props.position.interpolate({
+			inputRange,
+			outputRange: inputRange.map(i => i * ((isWeb ? 800 : layout.width) / 7)),
+		});
+
+		return (
+			<View style={{ position: 'relative' }}>
+				<View
+					style={{
+						position: 'absolute',
+						left: (isWeb ? 800 : layout.width) / 7,
+						top: 0,
+						height: 48,
+						width: (isWeb ? 800 : layout.width) * 6 / 7,
+						backgroundColor: 'white',
+						zIndex: 1
+					}}
+				/>
+				<Animated.View
+					style={{
+						position: 'absolute',
+						left: (isWeb ? 800 : layout.width) / 7,
+						top: 0,
+						height: 48,
+						width: (isWeb ? 800 : layout.width) / 7,
+						transform: [{ translateX }],
+						zIndex: 2
+					}}
+				>
+					<LinearGradient
+						colors={['rgb(38,151,108)', 'rgb(106,184,69)']}
+						start={{ x: 0, y: 0 }}
+						end={{ x: 1, y: 0 }}
+						style={{
+							height: '100%',
+							width: '100%',
+						}}
+					/>
+				</Animated.View>
+				<View
+					style={{
+						position: 'absolute',
+						left: (isWeb ? 800 : layout.width) / 7,
+						bottom: 0,
+						height: 10,
+						width: (isWeb ? 800 : layout.width) * 6 / 7,
+						backgroundColor: 'transparent',
+						shadowColor: 'rgb(19, 20, 19)',
+						shadowOffset: { width: 0, height: 5 },
+						shadowOpacity: 0.12,
+						shadowRadius: 10,
+						elevation: 5,
+						zIndex: 3
+					}}
+				/>
+				<TabBar
+					{...props}
+					style={{
+						shadowColor: 'rgb(19, 20, 19)',
+						shadowOffset: { width: 0, height: 5 },
+						shadowOpacity: 0.12,
+						shadowRadius: 10,
+						elevation: 5,
+						left: (isWeb ? 800 : layout.width) / 7,
+						height: 48,
+						backgroundColor: 'transparent',
+						position: 'relative',
+						zIndex: 10
+					}}
+					indicatorStyle={{
+						height: 0,
+						backgroundColor: 'transparent',
+					}}
+					contentContainerStyle={{
+						overflow: 'hidden',
+					}}
+					tabStyle={{
+						width: (isWeb ? 800 : layout.width) / 7,
+						padding: 0,
+						alignContent: 'center',
+						marginHorizontal: 0,
+						marginVertical: 0,
+						borderLeftWidth: 1,
+						borderLeftColor: 'rgb(218,221,219)'
+					}}
+					pressColor='transparent'
+					pressOpacity={1}
+					activeColor='white'
+					inactiveColor='rgba(94,103,99, 0.7)'
+				/>
+			</View>
+		);
+	}, [layout.width, isNavigating]);
 
 	// Memoize the scene map
 	const renderScene = useMemo(() => 
@@ -209,6 +278,7 @@ export default function HomeScreen() {
 					swipeEnabled={!isWeb}
 					commonOptions={commonOptions}
 					renderTabBar={renderTabBar}
+					pagerStyle={{ zIndex: -1 }}
 				/>
 			</View>
 		</View>
