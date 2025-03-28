@@ -62,7 +62,7 @@ interface CardMatchProps {
   onFavoritePress?: () => void;
 }
 
-export const CardMatch: React.FC<CardMatchProps> = ({
+const CardMatchComponent: React.FC<CardMatchProps> = ({
   fixture,
   isLastMatch = false,
   isFromFavorites = false,
@@ -202,6 +202,21 @@ export const CardMatch: React.FC<CardMatchProps> = ({
     </Pressable>
   );
 };
+
+// Memoize the component with a custom comparison function
+export const CardMatch = React.memo(CardMatchComponent, (prevProps, nextProps) => {
+  // Only re-render if these props change
+  return (
+    prevProps.fixture.id === nextProps.fixture.id &&
+    prevProps.fixture.status.elapsed === nextProps.fixture.status.elapsed &&
+    prevProps.fixture.score.fulltime?.home === nextProps.fixture.score.fulltime?.home &&
+    prevProps.fixture.score.fulltime?.away === nextProps.fixture.score.fulltime?.away &&
+    prevProps.fixture.goals.home === nextProps.fixture.goals.home &&
+    prevProps.fixture.goals.away === nextProps.fixture.goals.away &&
+    prevProps.isLastMatch === nextProps.isLastMatch &&
+    prevProps.isFromFavorites === nextProps.isFromFavorites
+  );
+});
 
 // const StyledCardMatch = styled(Link, {
 //   display: "grid",

@@ -1,4 +1,3 @@
-'use dom'
 
 import { View } from 'react-native'
 import { Text } from '../ui/text'
@@ -7,7 +6,6 @@ import { memo } from 'react'
 import { SvgUri } from 'react-native-svg'
 import { cn } from '@/utils/misc'
 import { Platform } from 'react-native'
-import { useItemContext } from '@rn-primitives/accordion'
 
 export interface CountryItemProps {
 	image: string
@@ -22,7 +20,6 @@ export default function CountryItem({
 	totalMatches,
 	totalLiveMatches,
 }: CountryItemProps) {
-	const { isExpanded } = useItemContext()
 
 	return (
 		<View className="relative flex h-40 flex-1 flex-row items-center">
@@ -37,7 +34,7 @@ export default function CountryItem({
 				<Text
 					className={cn(
 						"dark:text-neu-06 text-left font-semibold text-neu-10 [[data-state=expanded]_&]:text-neu-01",
-						isExpanded && "text-neu-01"
+						// isExpanded && "text-neu-01"
 					)}
 				>
 					{name}

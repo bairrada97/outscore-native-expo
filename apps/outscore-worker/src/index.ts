@@ -64,7 +64,7 @@ app.use('*', async (c, next) => {
     return new Response(null, {
       status: 204,
       headers: {
-        'Access-Control-Allow-Origin': origin && approvedOrigins.includes(origin) ? origin : '*',
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
         'Access-Control-Max-Age': '86400', // 24 hours
@@ -78,19 +78,9 @@ app.use('*', async (c, next) => {
     return;
   }
   
-  // Primary authentication: Check if the request is from an approved origin
-  if (origin && approvedOrigins.includes(origin)) {
-    // Request is from an approved frontend origin - allow it
-    await next();
-    return;
-  }
-  
-  // If we get here, the request is not from an approved origin
-  // Block access without requiring an API key
-  return c.json({
-    error: 'unauthorized',
-    message: 'Access to this API is restricted to approved origins only'
-  }, 401);
+  // Temporarily allow all origins
+  await next();
+  return;
 });
 
 // Health check
@@ -271,23 +261,6 @@ app.get('/fixtures', zValidator('query', dateSchema), async (c) => {
   }
 });
 
-// Add CORS headers to all responses
-app.use('*', async (c, next) => {
-  // Process the request first
-  await next();
-  
-  // Get the origin from request
-  const origin = c.req.header('origin');
-  
-  // If origin is allowed, add CORS headers to response
-  if (origin && approvedOrigins.includes(origin)) {
-    c.res.headers.set('Access-Control-Allow-Origin', origin);
-    c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
-    c.res.headers.set('Access-Control-Expose-Headers', 'Content-Length, X-Source, X-Response-Time, X-TTL, X-UTC-Today, X-User-Timezone, X-Requested-Date, X-Is-UTC-Today, X-Data-Age, X-In-Three-Day-Window, X-Cache-Status, Cache-Control, Pragma, Expires');
-  }
-});
-
 export default {
   async fetch(request: Request, env: any, ctx: ExecutionContext): Promise<Response> {
     // Initialize background refresh timer on first request
@@ -296,32 +269,16 @@ export default {
     // Get the origin from the request
     const origin = request.headers.get('Origin') || '';
     
-    // Check if the origin is allowed
-    const isAllowedOrigin = origin && approvedOrigins.some(approved => approved === origin);
-    
     // Handle OPTIONS request for CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
         headers: {
-          'Access-Control-Allow-Origin': isAllowedOrigin ? origin : 'null',
+          'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
           'Access-Control-Max-Age': '86400', // 24 hours
         },
-      });
-    }
-    
-    // For non-OPTIONS requests, check origin for direct browser access
-    if (!isAllowedOrigin && !request.headers.get('X-API-Key') && request.url.indexOf('/health') === -1) {
-      return new Response(JSON.stringify({
-        error: 'unauthorized',
-        message: 'Access to this API is restricted to approved origins only'
-      }), {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json'
-        }
       });
     }
 
@@ -335,13 +292,11 @@ export default {
     const responseTime = (performance.now() - requestStartTime).toFixed(2);
     response.headers.set('X-Response-Time', `${responseTime}ms`);
     
-    // Add CORS headers for allowed origins
-    if (isAllowedOrigin) {
-      response.headers.set('Access-Control-Allow-Origin', origin);
-      response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
-      response.headers.set('Access-Control-Expose-Headers', 'X-Response-Time, X-Source, X-TTL, X-UTC-Today, X-User-Timezone, X-Requested-Date, X-Is-UTC-Today, X-In-Three-Day-Window, X-Cache-Status, X-Data-Age, Cache-Control, Pragma, Expires');
-    }
+    // Add CORS headers for all origins
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
+    response.headers.set('Access-Control-Expose-Headers', 'X-Response-Time, X-Source, X-TTL, X-UTC-Today, X-User-Timezone, X-Requested-Date, X-Is-UTC-Today, X-In-Three-Day-Window, X-Cache-Status, X-Data-Age, Cache-Control, Pragma, Expires');
     
     // Return final response
     return response;

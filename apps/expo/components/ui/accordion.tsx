@@ -7,6 +7,7 @@ import Animated, {
   Extrapolation,
   FadeIn,
   FadeOutUp,
+  FadingTransition,
   LayoutAnimationConfig,
   LinearTransition,
   interpolate,
@@ -126,8 +127,9 @@ function InnerContent({ children, className }: { children: React.ReactNode; clas
   }
   return (
     <Animated.View
-      entering={FadeIn}
+      entering={FadeIn.duration(300).delay(100)}
       exiting={FadeOutUp.duration(200)}
+      layout={LinearTransition.duration(300)}
       className={cn('pb-4', className)}
     >
       {children}
