@@ -22,12 +22,12 @@ const getApiBaseUrl = () => {
 	
 	// For web in development, use localhost with correct port
 	if (Platform.OS === 'web') {
-		return 'http://localhost:3000';
+		return 'https://outscore-api.outscore.workers.dev';
 	}
 	
 	// For iOS simulators in development, use localhost
 	if (Platform.OS === 'ios') {
-		return 'http://localhost:3000';
+		return 'https://outscore-api.outscore.workers.dev';
 	}
 	
 	// For Android devices/emulators:
@@ -37,40 +37,41 @@ const getApiBaseUrl = () => {
 		// Example: return 'http://192.168.1.100:3000';
 		
 		// You can find your IP address on Windows with 'ipconfig' or on Mac/Linux with 'ifconfig' or 'ip addr'
-		return 'http://192.168.178.130:3000'; 
+		return 'https://outscore-api.outscore.workers.dev';
 		
 		// For Android Emulator only (won't work with Expo Go on physical device):
 		// return 'http://10.0.2.2:3000';
 	}
 	
 	// Fallback
-	return 'http://localhost:3000'; 
+	return 'https://outscore-api.outscore.workers.dev'; 
 };
 
 export const getFixturesByDate = async (args: any) => {
 	const baseUrl = getApiBaseUrl();
 	const params = new URLSearchParams(args).toString();
 	try {
-		console.log(`Fetching fixtures from: ${baseUrl}/fixtures?${params}`);
-
-		const response = await fetch(
-			`${baseUrl}/fixtures?${params}`,
-			{
-				headers: {
-					'Accept': 'application/json',
-					'Content-Type': 'application/json',
-				},
-			}
-		);
-		
-		if (!response.ok) {
-			throw new Error(`API request failed with status ${response.status}`);
+	  console.log(`Fetching fixtures from: ${baseUrl}/fixtures?${params}`);
+  
+	  const response = await fetch(
+		`${baseUrl}/fixtures?${params}`,
+		{
+		  headers: {
+			'Accept': 'application/json',
+			'Content-Type': 'application/json',
+		  },
 		}
-		
-		const data = await response.json();
-		return data.data;
+	  );
+	  
+
+	  if (!response.ok) {
+		throw new Error(`API request failed with status ${response.status}`);
+	  }
+	  
+	  const data = await response.json();
+	  return data.data;
 	} catch (error) {
-		console.error('Error fetching fixtures:', error);
-		throw error;
+	  console.error('Error fetching fixtures:', error);
+	  throw error;
 	}
-}
+  }

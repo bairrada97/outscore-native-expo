@@ -103,14 +103,14 @@ export const CalendarBar = ({ children }: any) => {
         selectedDateIndex: 2,
         selectedDate: formatDateBasedOnTimezone(new Date(), timezone),
       });
-      router.navigate(`/date/${selectedDate}`);
+      router.navigate(`?date=${selectedDate}`);
     } else {
       setDatePicker({
         ...datePicker,
         selectedDateIndex: 5,
         selectedDate: formatDateBasedOnTimezone(new Date(), timezone),
       });
-      router.navigate(`/date/live`);
+      router.navigate(`?date=live`);
     }
   };
 
@@ -118,7 +118,7 @@ export const CalendarBar = ({ children }: any) => {
     <ScrollView 
       horizontal
       showsHorizontalScrollIndicator={false}
-      className="dark:bg-neu-11 dark:shadow-sha-06 flex h-48 flex-row bg-neu-01 shadow-sha-01"
+      className="dark:bg-neu-11 dark:shadow-sha-06 flex h-48 box-border flex-row bg-neu-01 shadow-sha-01"
       contentContainerStyle={{ flex: 1 }}
     >
       <CalendarBarButton

@@ -1,9 +1,8 @@
+import { FormattedCountry, FormattedLeague } from '@outscore/shared-types'
 import { CardMatch } from '../CardMatch/CardMatch'
 import { CardsBlock } from '../CardsBlock/CardsBlock'
-import { FixtureOverview, League } from '@/utils/outscore-repository'
 import { NoResultsBox } from '../NoResultsBox/NoResultsBox'
 import { View } from 'react-native'
-import { FormattedCountry, FormattedLeague } from '../../../../packages/shared-types/dist'
 
 const List = ({ data, groupBy }: { data: FormattedLeague[]; groupBy?: boolean }) => {
 	return (
@@ -19,7 +18,6 @@ const List = ({ data, groupBy }: { data: FormattedLeague[]; groupBy?: boolean })
 										<CardMatch
 											key={match.id}
 											fixture={match}
-											shouldPrefetch={true}
 											isLastMatch={false}
 										/>
 									)
@@ -38,7 +36,7 @@ export const FavoriteFixtureList = ({
 	data: FormattedCountry[]
 	groupBy?: boolean
 }) => {
-	const favoriteLeaguesID = [1, 2, 3, 94, 39, 88, 140, 135, 61, 78, 743, 960]
+	const favoriteLeaguesID = [1, 2, 3, 5, 94, 39, 88, 140, 135, 61, 78, 743, 960, 858, 10, 34]
  
 	let formatFavoriteData: FormattedLeague[] = []
 	if (groupBy) {

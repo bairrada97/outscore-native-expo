@@ -43,4 +43,10 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   return context.resolveRequest(context, moduleName, platform);
 };
 
+config.transformer.getTransformOptions = async () => ({
+  transform: {
+    experimentalImportSupport: true,
+  },
+});
+
 module.exports = withNativeWind(config, { input: './global.css' }) 

@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 import 'react-native-reanimated'
 import React from 'react'
 import { isSameDay, format } from 'date-fns'
+import { AppState, AppStateStatus } from 'react-native'
 
 import { useColorScheme } from '@/hooks/useColorScheme'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
@@ -24,7 +25,6 @@ import {
 } from '@tanstack/react-query'
 import { PaperProvider } from 'react-native-paper'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { AppStateStatus } from 'react-native'
 import { isWeb } from '@gluestack-ui/nativewind-utils/IsWeb'
 import { useOnlineManager } from '@/hooks/useOnlineManager'
 import { useAppState } from '@/hooks/useAppState'
@@ -40,6 +40,7 @@ import {
 } from '@tanstack/react-query-persist-client'
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
 import { prefetchFixtureData } from '@/queries/prefetch-utils'
+import { createQueryKey } from '@/queries/fixture-by-date-query'
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync()
@@ -67,6 +68,9 @@ const queryClient = new QueryClient({
 	},
 })
 
+// Define app version for cache busting
+const APP_VERSION = '1.0.0'; // Update this when making breaking changes to the cache structure
+
 // Create the persister for AsyncStorage with more robust configuration
 const asyncStoragePersister = createAsyncStoragePersister({
 	storage: AsyncStorage,
@@ -79,22 +83,23 @@ const asyncStoragePersister = createAsyncStoragePersister({
 // Set up persistence options
 const persistOptions = {
 	persister: asyncStoragePersister,
-	maxAge: 1000 * 60 * 60 * 24 * 3, // Keep persisted data for 3 days
+	maxAge: 14 * 24 * 60 * 60 * 1000, // Keep persisted data for 14 days
+	buster: APP_VERSION, // Added to prevent old versions from hydrating
 	dehydrateOptions: {
 		shouldDehydrateQuery: (query: any) => {
-			// Don't persist today's data since it changes frequently
-			if (query.queryKey && 
-				Array.isArray(query.queryKey) && 
-				query.queryKey.length >= 2 && 
-				query.queryKey[0] === 'fixtures-by-date') {
-				const dateString = query.queryKey[1];
-				if (typeof dateString === 'string') {
-					return !isSameDay(new Date(dateString), new Date());
+			// Don't persist today's data
+			const isFixturesQuery = Array.isArray(query.queryKey) && query.queryKey[0] === 'fixtures-by-date';
+			if (isFixturesQuery) {
+				const date = query.queryKey[1] as string;
+				const today = format(new Date(), 'yyyy-MM-dd');
+				if (date === today) {
+					console.log(`Not persisting today's data: ${date}`);
+					return false;
 				}
 			}
-			return true; // Persist everything else
-		},
-	}, 
+			return true;
+		}
+	}
 }
 
 // Track the date to detect day changes between app uses
@@ -134,6 +139,62 @@ function AppContent() {
 		debugCacheState();
 	}, []);
 	
+	// Check if tomorrow's first match has started when app comes into focus
+	useEffect(() => {
+		// Function to check if tomorrow's match has started
+		const checkTomorrowMatchStarted = async () => {
+			try {
+				// Calculate tomorrow's date
+				const tomorrow = new Date();
+				tomorrow.setDate(tomorrow.getDate() + 1);
+				const tomorrowFormatted = format(tomorrow, 'yyyy-MM-dd');
+				
+				// Try to get the first match time for tomorrow
+				const firstMatchKey = `firstMatch_${tomorrowFormatted}`;
+				const firstMatchTimestamp = await AsyncStorage.getItem(firstMatchKey);
+				
+				if (firstMatchTimestamp) {
+					const firstMatchTime = parseInt(firstMatchTimestamp, 10);
+					const now = Date.now();
+					
+					// If the first match has already started, invalidate tomorrow's cache
+					if (now >= firstMatchTime) {
+						console.log('App focused: Tomorrow\'s first match has started, invalidating cache');
+						
+						// Get tomorrow's query key
+						const tomorrowQuery = createQueryKey(tomorrowFormatted, timeZone);
+						
+						// Remove the cached data for tomorrow
+						queryClient.removeQueries({ queryKey: tomorrowQuery });
+						
+						// Clear the stored first match time
+						await AsyncStorage.removeItem(firstMatchKey);
+						
+						console.log('Tomorrow\'s fixture cache invalidated on app focus');
+					}
+				}
+			} catch (error) {
+				console.error('Error checking tomorrow\'s matches on app focus:', error);
+			}
+		};
+		
+		// Set up app state change listener
+		const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+			if (nextAppState === 'active') {
+				console.log('App has come to the foreground, checking matches');
+				checkTomorrowMatchStarted();
+			}
+		});
+		
+		// Run once on mount too
+		checkTomorrowMatchStarted();
+		
+		// Clean up listener on unmount
+		return () => {
+			subscription.remove();
+		};
+	}, [timeZone]); // Depend on timezone to re-run if it changes
+	
 	// Check for date change when the app is loaded
 	useEffect(() => {
 		const checkDateChange = async () => {
@@ -164,6 +225,54 @@ function AppContent() {
 					}
 				}
 				
+				// Check if tomorrow's first match has started (on app load)
+				// This handles the case when the app was closed during the day and reopened
+				const checkTomorrowMatches = async () => {
+					// Calculate tomorrow's date
+					const tomorrow = new Date();
+					tomorrow.setDate(tomorrow.getDate() + 1);
+					const tomorrowFormatted = format(tomorrow, 'yyyy-MM-dd');
+					
+					// Try to get the first match time for tomorrow
+					const firstMatchKey = `firstMatch_${tomorrowFormatted}`;
+					const firstMatchTimestamp = await AsyncStorage.getItem(firstMatchKey);
+					
+					if (firstMatchTimestamp) {
+						const firstMatchTime = parseInt(firstMatchTimestamp, 10);
+						const now = Date.now();
+						
+						console.log(`Tomorrow's first match time: ${new Date(firstMatchTime).toISOString()}`);
+						console.log(`Current time: ${new Date(now).toISOString()}`);
+						
+						// If the first match has already started, invalidate tomorrow's cache
+						if (now >= firstMatchTime) {
+							console.log('Tomorrow\'s first match has started, invalidating cache');
+							
+							// Get tomorrow's query key
+							const tomorrowQuery = createQueryKey(tomorrowFormatted, timeZone);
+							
+							// Remove the cached data for tomorrow
+							queryClient.removeQueries({ queryKey: tomorrowQuery });
+							
+							// Clear the stored first match time
+							await AsyncStorage.removeItem(firstMatchKey);
+							
+							console.log('Tomorrow\'s fixture cache invalidated');
+						} else {
+							// First match hasn't started yet, log time until match
+							const timeUntilMatch = Math.round((firstMatchTime - now) / 60000);
+							console.log(`Tomorrow's first match starts in ${timeUntilMatch} minutes`);
+						}
+					} else {
+						console.log('No stored time for tomorrow\'s first match');
+					}
+				};
+				
+				// Execute the check
+				await checkTomorrowMatches().catch(error => {
+					console.error('Error checking tomorrow\'s matches:', error);
+				});
+				
 				// Always store today's date for future comparison
 				try {
 					await AsyncStorage.setItem(LAST_TODAY_DATE_KEY, todayFormatted);
@@ -183,7 +292,7 @@ function AppContent() {
 		};
 		
 		checkDateChange();
-	}, []);
+	}, [timeZone]);
 	
 	// Prefetch data only once after timezone is loaded
 	useEffect(() => {

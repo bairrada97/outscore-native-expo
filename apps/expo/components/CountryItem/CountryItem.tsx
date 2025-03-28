@@ -1,12 +1,11 @@
-'use dom'
 
 import { View } from 'react-native'
-
 import { Text } from '../ui/text'
 import { Image } from '../ui/image'
 import { memo } from 'react'
 import { SvgUri } from 'react-native-svg'
 import { cn } from '@/utils/misc'
+import { Platform } from 'react-native'
 
 export interface CountryItemProps {
 	image: string
@@ -14,37 +13,39 @@ export interface CountryItemProps {
 	totalMatches: number
 	totalLiveMatches?: number
 }
+
 export default function CountryItem({
 	image,
 	name,
 	totalMatches,
 	totalLiveMatches,
 }: CountryItemProps) {
+
 	return (
-		<div className="flex h-40 flex-1 flex-row items-center">
-			<div className="flex flex-1 flex-row items-center gap-x-16">
-				<div className="rounded-1/2 before:rounded-1/2 dark:shadow-sha-06 dark:before:border-neu-10 dark:[[data-state=open]_&]:before:shadow-sha-06 relative box-border flex h-24 w-24 flex-row items-center justify-center shadow-sha-01 will-change-transform before:absolute before:left-1/2 before:top-1/2 before:h-[28px] before:w-[28px] before:-translate-x-1/2 before:-translate-y-1/2 before:border-2 before:border-neu-01 before:content-[''] [[data-state=open]_&]:before:border-m-01--light-03 [[data-state=open]_&]:before:shadow-sha-01">
-					<div className="rounded-1/2 before:rounded-1/2 absolute flex h-full w-full flex-row items-center justify-center overflow-hidden before:absolute before:left-[0] before:top-[0] before:z-10 before:h-full before:w-full before:bg-neu-10 before:opacity-[0.08] before:content-['']">
+		<View className="relative flex h-40 flex-1 flex-row items-center">
+				<View className="flex flex-1 flex-row items-center gap-x-16">
+					<View className="rounded-1/2  absolute flex h-full w-full flex-row items-center justify-center overflow-hidden">
 						{/* <Image
 								source={{ uri: image }}
 								className="h-40 w-40"
 								resizeMode="cover"
 							/> */}
-					</div>
-				</div>
-				<h2
-					// variant="body-01--semi"
-					className="dark:text-neu-06 text-left font-semibold text-neu-10 [[data-state=open]_&]:text-neu-01"
+					</View>
+				<Text
+					className={cn(
+						"dark:text-neu-06 text-left font-semibold text-neu-10 [[data-state=expanded]_&]:text-neu-01",
+						// isExpanded && "text-neu-01"
+					)}
 				>
 					{name}
-				</h2>
-			</div>
+				</Text>
+			</View>
 
 			{/* <CountryDailyMatches
 				liveMatchesLength={totalLiveMatches}
 				dailyMatchesLength={totalMatches}
 			/> */}
-		</div>
+		</View>
 	)
 }
 
@@ -81,7 +82,7 @@ export default function CountryItem({
 //       [`[data-theme="dark"] &`]: {
 //         border: "2px solid rgb($neu-10)",
 //       },
-//       '[data-state="open"] &': {
+//       '[data-state="expanded"] &': {
 //         border: "2px solid rgb($m-01--light-03)",
 //         boxShadow: "$sha-01",
 //         [`[data-theme="dark"] &`]: {
@@ -153,7 +154,7 @@ export default function CountryItem({
 //     },
 //   },
 
-//   '[data-state="open"] &': {
+//   '[data-state="expanded"] &': {
 //     "& .countryItem__matchesLength": {
 //       color: "rgb($neu-01)",
 //       boxShadow: "inset 0px 0px 0px 1px rgb(240, 241, 241, 0.3)",
