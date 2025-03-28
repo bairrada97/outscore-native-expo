@@ -180,8 +180,8 @@ export default function HomeScreen() {
 						zIndex: 10
 					}}
 					indicatorStyle={{
-						height: 0,
 						backgroundColor: 'transparent',
+						height: 0
 					}}
 					contentContainerStyle={{
 						overflow: 'hidden',
